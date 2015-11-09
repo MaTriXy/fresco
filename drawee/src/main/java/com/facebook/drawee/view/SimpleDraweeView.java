@@ -11,8 +11,10 @@ package com.facebook.drawee.view;
 
 import javax.annotation.Nullable;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.net.Uri;
+import android.os.Build;
 import android.util.AttributeSet;
 
 import com.facebook.common.internal.Preconditions;
@@ -64,7 +66,16 @@ public class SimpleDraweeView extends GenericDraweeView {
     init();
   }
 
+  @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+  public SimpleDraweeView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    super(context, attrs, defStyleAttr, defStyleRes);
+    init();
+  }
+
   private void init() {
+    if (isInEditMode()) {
+      return;
+    }
     Preconditions.checkNotNull(
         sDraweeControllerBuilderSupplier,
         "SimpleDraweeView was not initialized!");

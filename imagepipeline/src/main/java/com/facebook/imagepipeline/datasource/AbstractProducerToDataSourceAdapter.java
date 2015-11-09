@@ -61,6 +61,11 @@ public abstract class AbstractProducerToDataSourceAdapter<T> extends AbstractDat
       protected void onCancellationImpl() {
         AbstractProducerToDataSourceAdapter.this.onCancellationImpl();
       }
+
+      @Override
+      protected void onProgressUpdateImpl(float progress) {
+        AbstractProducerToDataSourceAdapter.this.setProgress(progress);
+      }
     };
   }
 

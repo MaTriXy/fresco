@@ -13,10 +13,10 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CancellationException;
 
 import com.facebook.common.executors.CallerThreadExecutor;
-import com.facebook.common.internal.Lists;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.AbstractDataSource;
@@ -32,7 +32,7 @@ import com.facebook.datasource.DataSubscriber;
  *
  * @param <T>
  */
-public class ListDataSource<T> extends AbstractDataSource<ArrayList<CloseableReference<T>>> {
+public class ListDataSource<T> extends AbstractDataSource<List<CloseableReference<T>>> {
   private final DataSource<CloseableReference<T>>[] mDataSources;
   @GuardedBy("this")
   private int mFinishedDataSources;
@@ -48,20 +48,22 @@ public class ListDataSource<T> extends AbstractDataSource<ArrayList<CloseableRef
     Preconditions.checkState(dataSources.length > 0);
     ListDataSource<T> listDataSource = new ListDataSource<T>(dataSources);
     for (DataSource<CloseableReference<T>> dataSource : dataSources) {
-      dataSource.subscribe(
-          listDataSource.new InternalDataSubscriber(),
-          CallerThreadExecutor.getInstance());
+      if (dataSource != null) {
+        dataSource.subscribe(
+            listDataSource.new InternalDataSubscriber(),
+            CallerThreadExecutor.getInstance());
+      }
     }
     return listDataSource;
   }
 
   @Override
   @Nullable
-  public synchronized ArrayList<CloseableReference<T>> getResult() {
+  public synchronized List<CloseableReference<T>> getResult() {
     if (!hasResult()) {
       return null;
     }
-    ArrayList<CloseableReference<T>> results = Lists.newArrayListWithCapacity(mDataSources.length);
+    List<CloseableReference<T>> results = new ArrayList<>(mDataSources.length);
     for (DataSource<CloseableReference<T>> dataSource : mDataSources) {
       results.add(dataSource.getResult());
     }
@@ -102,6 +104,14 @@ public class ListDataSource<T> extends AbstractDataSource<ArrayList<CloseableRef
     setFailure(new CancellationException());
   }
 
+  private void onDataSourceProgress() {
+    float progress = 0;
+    for (DataSource<?> dataSource : mDataSources) {
+      progress += dataSource.getProgress();
+    }
+    setProgress(progress / mDataSources.length);
+  }
+
   private class InternalDataSubscriber implements DataSubscriber<CloseableReference<T>> {
     @GuardedBy("InternalDataSubscriber.this")
     boolean mFinished = false;
@@ -129,6 +139,11 @@ public class ListDataSource<T> extends AbstractDataSource<ArrayList<CloseableRef
       if (dataSource.isFinished() && tryFinish()) {
         ListDataSource.this.onDataSourceFinished();
       }
+    }
+
+    @Override
+    public void onProgressUpdate(DataSource<CloseableReference<T>> dataSource) {
+      ListDataSource.this.onDataSourceProgress();
     }
   }
 }

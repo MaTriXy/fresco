@@ -20,6 +20,11 @@ public class ImageDecodeOptions {
   private static final ImageDecodeOptions DEFAULTS = ImageDecodeOptions.newBuilder().build();
 
   /**
+   * Decoding of intermediate results for an image won't happen more often that minDecodeIntervalMs.
+   */
+  public final int minDecodeIntervalMs;
+
+  /**
    * Background color used when converting to image formats that don't support transparency.
    */
   public final int backgroundColor;
@@ -39,11 +44,20 @@ public class ImageDecodeOptions {
    */
   public final boolean useLastFrameForPreview;
 
+  /**
+   * Whether to decode all the frames and store them in memory. This should only ever be used
+   * for animations that are known to be small (e.g. stickers). Caching dozens of large Bitmaps
+   * in memory for general GIFs or WebP's will not fit in memory.
+   */
+  public final boolean decodeAllFrames;
+
   ImageDecodeOptions(ImageDecodeOptionsBuilder b) {
+    this.minDecodeIntervalMs = b.getMinDecodeIntervalMs();
     this.backgroundColor = b.getBackgroundColor();
     this.forceOldAnimationCode = b.getForceOldAnimationCode();
     this.decodePreviewFrame = b.getDecodePreviewFrame();
     this.useLastFrameForPreview = b.getUseLastFrameForPreview();
+    this.decodeAllFrames = b.getDecodeAllFrames();
   }
 
   /**
@@ -75,6 +89,7 @@ public class ImageDecodeOptions {
     if (forceOldAnimationCode != that.forceOldAnimationCode) return false;
     if (decodePreviewFrame != that.decodePreviewFrame) return false;
     if (useLastFrameForPreview != that.useLastFrameForPreview) return false;
+    if (decodeAllFrames != that.decodeAllFrames) return false;
 
     return true;
   }

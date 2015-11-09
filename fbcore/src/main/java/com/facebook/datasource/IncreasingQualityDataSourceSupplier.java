@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.facebook.common.executors.CallerThreadExecutor;
-import com.facebook.common.internal.Lists;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
@@ -96,7 +95,7 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
     public IncreasingQualityDataSource() {
       final int n = mDataSourceSuppliers.size();
       mIndexOfDataSourceWithResult = n;
-      mDataSources = Lists.newArrayListWithCapacity(n);
+      mDataSources = new ArrayList<>(n);
       for (int i = 0; i < n; i++) {
         DataSource<T> dataSource = mDataSourceSuppliers.get(i).get();
         mDataSources.add(dataSource);
@@ -242,6 +241,13 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
 
       @Override
       public void onCancellation(DataSource<T> dataSource) {
+      }
+
+      @Override
+      public void onProgressUpdate(DataSource<T> dataSource) {
+        if (mIndex == 0) {
+          IncreasingQualityDataSource.this.setProgress(dataSource.getProgress());
+        }
       }
     }
   }

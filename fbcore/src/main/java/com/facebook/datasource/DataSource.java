@@ -29,7 +29,7 @@ public interface DataSource<T> {
   /**
    * @return true if the data source is closed, false otherwise
    */
-  public boolean isClosed();
+  boolean isClosed();
 
   /**
    * The most recent result of the asynchronous computation.
@@ -66,6 +66,11 @@ public interface DataSource<T> {
    * @return failure cause if the source has failed, else null
    */
   @Nullable Throwable getFailureCause();
+
+  /**
+   * @return progress in range [0, 1]
+   */
+  float getProgress();
 
   /**
    * Cancels the ongoing request and releases all associated resources.

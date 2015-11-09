@@ -15,7 +15,7 @@ import com.facebook.drawee.drawable.DrawableTestUtils;
 import com.facebook.drawee.interfaces.DraweeHierarchy;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.testing.DraweeMocks;
-import com.facebook.testing.robolectric.v2.WithTestDefaultsRunner;
+import org.robolectric.RobolectricTestRunner;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -29,7 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-@RunWith(WithTestDefaultsRunner.class)
+@RunWith(RobolectricTestRunner.class)
 public class DraweeHolderTest {
 
   private DraweeHolder mDraweeHolder;
@@ -166,8 +166,8 @@ public class DraweeHolderTest {
     verifyControllerLifecycleCalls(0, 1);
   }
 
-  private void verifyControllerLifecycleCalls(int numOnAttach, int numOnDetatch) {
+  private void verifyControllerLifecycleCalls(int numOnAttach, int numOnDetach) {
     mInOrderVerifier.verify(mController, times(numOnAttach)).onAttach();
-    mInOrderVerifier.verify(mController, times(numOnDetatch)).onDetach();
+    mInOrderVerifier.verify(mController, times(numOnDetach)).onDetach();
   }
 }

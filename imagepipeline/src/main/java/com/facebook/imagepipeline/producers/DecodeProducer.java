@@ -15,37 +15,37 @@ import javax.annotation.concurrent.GuardedBy;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
-import android.os.SystemClock;
+import android.graphics.Bitmap;
 
 import com.facebook.common.internal.ImmutableMap;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.util.UriUtil;
 import com.facebook.imagepipeline.common.ImageDecodeOptions;
-import com.facebook.imagepipeline.decoder.ProgressiveJpegConfig;
 import com.facebook.imagepipeline.decoder.ImageDecoder;
+import com.facebook.imagepipeline.decoder.ProgressiveJpegConfig;
 import com.facebook.imagepipeline.decoder.ProgressiveJpegParser;
 import com.facebook.imagepipeline.image.CloseableImage;
+import com.facebook.imagepipeline.image.CloseableStaticBitmap;
+import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
 import com.facebook.imagepipeline.memory.ByteArrayPool;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
 import com.facebook.imagepipeline.request.ImageRequest;
-import com.facebook.imageformat.ImageFormat;
+
+import static com.facebook.imagepipeline.producers.JobScheduler.JobRunnable;
 
 /**
- * Decodes images. Progressive JPEGs are decoded progressively as new data arrives
+ * Decodes images.
  *
- * TODO 5416926: use more elaborate algorithm for throttling decoded scans
+ * <p/> Progressive JPEGs are decoded progressively as new data arrives.
  */
 public class DecodeProducer implements Producer<CloseableReference<CloseableImage>> {
 
-  @VisibleForTesting
-  static final String PRODUCER_NAME = "DecodeProducer";
+  public static final String PRODUCER_NAME = "DecodeProducer";
 
   // keys for extra map
-  private static final String QUEUE_TIME_KEY = "queueTime";
+  private static final String BITMAP_SIZE_KEY = "bitmapSize";
   private static final String HAS_GOOD_QUALITY_KEY = "hasGoodQuality";
   private static final String IS_FINAL_KEY = "isFinal";
 
@@ -53,116 +53,105 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
   private final Executor mExecutor;
   private final ImageDecoder mImageDecoder;
   private final ProgressiveJpegConfig mProgressiveJpegConfig;
-  private final Producer<CloseableReference<PooledByteBuffer>> mNextProducer;
+  private final Producer<EncodedImage> mInputProducer;
+  private final boolean mDownsampleEnabled;
+  private final boolean mDownsampleEnabledForNetwork;
 
   public DecodeProducer(
       final ByteArrayPool byteArrayPool,
       final Executor executor,
       final ImageDecoder imageDecoder,
       final ProgressiveJpegConfig progressiveJpegConfig,
-      final Producer<CloseableReference<PooledByteBuffer>> nextProducer) {
+      final boolean downsampleEnabled,
+      final boolean downsampleEnabledForNetwork,
+      final Producer<EncodedImage> inputProducer) {
     mByteArrayPool = Preconditions.checkNotNull(byteArrayPool);
     mExecutor = Preconditions.checkNotNull(executor);
     mImageDecoder = Preconditions.checkNotNull(imageDecoder);
     mProgressiveJpegConfig = Preconditions.checkNotNull(progressiveJpegConfig);
-    mNextProducer = Preconditions.checkNotNull(nextProducer);
+    mDownsampleEnabled = downsampleEnabled;
+    mDownsampleEnabledForNetwork = downsampleEnabledForNetwork;
+    mInputProducer = Preconditions.checkNotNull(inputProducer);
   }
 
   @Override
   public void produceResults(
       final Consumer<CloseableReference<CloseableImage>> consumer,
-      final ProducerContext context) {
-    final ImageRequest imageRequest = context.getImageRequest();
+      final ProducerContext producerContext) {
+    final ImageRequest imageRequest = producerContext.getImageRequest();
     ProgressiveDecoder progressiveDecoder;
     if (!UriUtil.isNetworkUri(imageRequest.getSourceUri())) {
-      progressiveDecoder = new LocalImagesProgressiveDecoder(consumer, context);
+      progressiveDecoder = new LocalImagesProgressiveDecoder(consumer, producerContext);
     } else {
       ProgressiveJpegParser jpegParser = new ProgressiveJpegParser(mByteArrayPool);
       progressiveDecoder = new NetworkImagesProgressiveDecoder(
           consumer,
-          context,
+          producerContext,
           jpegParser,
           mProgressiveJpegConfig);
     }
-    mNextProducer.produceResults(progressiveDecoder, context);
+    mInputProducer.produceResults(progressiveDecoder, producerContext);
   }
 
-  @VisibleForTesting
-  abstract class ProgressiveDecoder extends BaseConsumer<CloseableReference<PooledByteBuffer>> {
+  private abstract class ProgressiveDecoder extends DelegatingConsumer<
+      EncodedImage, CloseableReference<CloseableImage>> {
 
-    private final Consumer<CloseableReference<CloseableImage>> mConsumer;
-    protected final ProducerContext mProducerContext;
+    private final ProducerContext mProducerContext;
     private final ProducerListener mProducerListener;
     private final ImageDecodeOptions mImageDecodeOptions;
 
     @GuardedBy("this")
     private boolean mIsFinished;
 
-    @GuardedBy("ProgressiveDecoder.this")
-    @VisibleForTesting CloseableReference<PooledByteBuffer> mStoredIntermediateImageBytesRef;
-    @GuardedBy("ProgressiveDecoder.this")
-    @VisibleForTesting int mStoredIntermediateImageBestScanEnd;
-    @GuardedBy("ProgressiveDecoder.this")
-    @VisibleForTesting ImageFormat mStoredIntermediateImageFormat;
-    @GuardedBy("ProgressiveDecoder.this")
-    @VisibleForTesting QualityInfo mStoredIntermediateImageQualityInfo;
+    private final JobScheduler mJobScheduler;
 
     public ProgressiveDecoder(
         final Consumer<CloseableReference<CloseableImage>> consumer,
         final ProducerContext producerContext) {
-      mConsumer = consumer;
+      super(consumer);
       mProducerContext = producerContext;
       mProducerListener = producerContext.getListener();
       mImageDecodeOptions = producerContext.getImageRequest().getImageDecodeOptions();
       mIsFinished = false;
+      JobRunnable job = new JobRunnable() {
+        @Override
+        public void run(EncodedImage encodedImage, boolean isLast) {
+          if (encodedImage != null) {
+            if (mDownsampleEnabled) {
+              ImageRequest request = producerContext.getImageRequest();
+              if (mDownsampleEnabledForNetwork ||
+                  !UriUtil.isNetworkUri(request.getSourceUri())) {
+                encodedImage.setSampleSize(DownsampleUtil.determineSampleSize(
+                    request, encodedImage));
+              }
+            }
+            doDecode(encodedImage, isLast);
+          }
+        }
+      };
+      mJobScheduler = new JobScheduler(mExecutor, job, mImageDecodeOptions.minDecodeIntervalMs);
       mProducerContext.addCallbacks(
           new BaseProducerContextCallbacks() {
             @Override
             public void onIsIntermediateResultExpectedChanged() {
               if (mProducerContext.isIntermediateResultExpected()) {
-                maybeScheduleStoredIntermediateImageDecode();
+                mJobScheduler.scheduleJob();
               }
             }
           });
     }
 
-    private synchronized void maybeScheduleStoredIntermediateImageDecode() {
-      if (mStoredIntermediateImageBytesRef != null) {
-        scheduleImageDecode(
-            mStoredIntermediateImageBytesRef,
-            mStoredIntermediateImageBestScanEnd,
-            mStoredIntermediateImageFormat,
-            mStoredIntermediateImageQualityInfo,
-            false);
-        closeStoredIntermediateImageBytes();
-      }
-    }
-
-    protected synchronized void updateStoredIntermediateImage(
-        CloseableReference<PooledByteBuffer> intermediateImageBytesRef,
-        int intermediateImageBestScanEnd,
-        ImageFormat intermediateImageFormat,
-        QualityInfo intermediateImageQualityInfo) {
-      closeStoredIntermediateImageBytes();
-      mStoredIntermediateImageBytesRef = intermediateImageBytesRef.clone();
-      mStoredIntermediateImageBestScanEnd = intermediateImageBestScanEnd;
-      mStoredIntermediateImageFormat = intermediateImageFormat;
-      mStoredIntermediateImageQualityInfo = intermediateImageQualityInfo;
-    }
-
-    protected synchronized void closeStoredIntermediateImageBytes() {
-      if (mStoredIntermediateImageBytesRef != null) {
-        mStoredIntermediateImageBytesRef.close();
-        mStoredIntermediateImageBytesRef = null;
-      }
-    }
-
     @Override
-    public void onNewResultImpl(CloseableReference<PooledByteBuffer> newResult, boolean isLast) {
-      if (isLast) {
-        decodeFinalImage(newResult);
-      } else {
-        maybeDecodeIntermediateImage(newResult);
+    public void onNewResultImpl(EncodedImage newResult, boolean isLast) {
+      if (isLast && !EncodedImage.isValid(newResult)) {
+        handleError(new NullPointerException("Encoded image is not valid."));
+        return;
+      }
+      if (!updateDecodeJob(newResult, isLast)) {
+        return;
+      }
+      if (isLast || mProducerContext.isIntermediateResultExpected()) {
+        mJobScheduler.scheduleJob();
       }
     }
 
@@ -176,105 +165,75 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
       handleCancellation();
     }
 
-    private void decodeFinalImage(final CloseableReference<PooledByteBuffer> imageBytesRef) {
-      closeStoredIntermediateImageBytes();
-      if (imageBytesRef == null) {
-        handleResult(null, true);
-      } else {
-        scheduleImageDecode(
-            imageBytesRef,
-            imageBytesRef.get().size(),
-            getImageFormat(imageBytesRef),
-            ImmutableQualityInfo.FULL_QUALITY,
-            /* isFinal */ true);
-      }
+    /** Updates the decode job. */
+    protected boolean updateDecodeJob(EncodedImage ref, boolean isLast) {
+      return mJobScheduler.updateJob(ref, isLast);
     }
 
-    protected void maybeDecodeIntermediateImage(
-        CloseableReference<PooledByteBuffer> imageBytesRef) {
-      Preconditions.checkNotNull(imageBytesRef);
-      final int bestScanEnd = getIntermediateImageEndOffset(imageBytesRef);
-      final ImageFormat imageFormat = getImageFormat(imageBytesRef);
-      final QualityInfo qualityInfo = getQualityInfo(imageBytesRef);
+    /** Performs the decode synchronously. */
+    private void doDecode(EncodedImage encodedImage, boolean isLast) {
+      if (isFinished() || !EncodedImage.isValid(encodedImage)) {
+        return;
+      }
 
-      synchronized (ProgressiveDecoder.this) {
-        if (!mProducerContext.isIntermediateResultExpected()) {
-          // do not schedule decode as the result is not expected.
-          // however, keep the result in case the client should need it in the future.
-          updateStoredIntermediateImage(
-              imageBytesRef,
-              bestScanEnd,
-              imageFormat,
-              qualityInfo);
-        } else {
-          closeStoredIntermediateImageBytes();
-          scheduleImageDecode(
-              imageBytesRef,
-              bestScanEnd,
-              imageFormat,
-              qualityInfo,
-              false);
+      try {
+        long queueTime = mJobScheduler.getQueuedTime();
+        int length = isLast ?
+            encodedImage.getSize() : getIntermediateImageEndOffset(encodedImage);
+        QualityInfo quality = isLast ? ImmutableQualityInfo.FULL_QUALITY : getQualityInfo();
+
+        mProducerListener.onProducerStart(mProducerContext.getId(), PRODUCER_NAME);
+        CloseableImage image = null;
+        try {
+          image = mImageDecoder.decodeImage(encodedImage, length, quality, mImageDecodeOptions);
+        } catch (Exception e) {
+          Map<String, String> extraMap = getExtraMap(image, queueTime, quality, isLast);
+          mProducerListener.
+              onProducerFinishWithFailure(mProducerContext.getId(), PRODUCER_NAME, e, extraMap);
+          handleError(e);
+          return;
         }
+        Map<String, String> extraMap = getExtraMap(image, queueTime, quality, isLast);
+        mProducerListener.
+            onProducerFinishWithSuccess(mProducerContext.getId(), PRODUCER_NAME, extraMap);
+        handleResult(image, isLast);
+      } finally {
+        EncodedImage.closeSafely(encodedImage);
       }
-    }
-
-    protected void scheduleImageDecode(
-        final CloseableReference<PooledByteBuffer> imageBytesRef,
-        final int length,
-        @Nullable final ImageFormat imageFormat,
-        final QualityInfo qualityInfo,
-        final boolean isFinal) {
-      final CloseableReference<PooledByteBuffer> imageBytesRefCopy = imageBytesRef.clone();
-      final long startTime = SystemClock.elapsedRealtime();
-      mExecutor.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              final long queueTime = SystemClock.elapsedRealtime() - startTime;
-              try {
-                if (isFinished()) {
-                  return;
-                }
-                mProducerListener.onProducerStart(mProducerContext.getId(), PRODUCER_NAME);
-                CloseableImage decodedImage = mImageDecoder.decodeImage(
-                    imageBytesRefCopy,
-                    imageFormat,
-                    length,
-                    qualityInfo,
-                    mImageDecodeOptions);
-                mProducerListener.onProducerFinishWithSuccess(
-                    mProducerContext.getId(),
-                    PRODUCER_NAME,
-                    getExtraMap(queueTime, qualityInfo, isFinal));
-                handleResult(decodedImage, isFinal);
-              } catch (Exception e) {
-                mProducerListener.onProducerFinishWithFailure(
-                    mProducerContext.getId(),
-                    PRODUCER_NAME,
-                    e,
-                    getExtraMap(queueTime, qualityInfo, isFinal));
-                handleError(e);
-              } finally {
-                imageBytesRefCopy.close();
-              }
-            }
-          });
     }
 
     private Map<String, String> getExtraMap(
-        final long queueTime,
-        final QualityInfo qualityInfo,
-        final boolean isFinal) {
+        @Nullable CloseableImage image,
+        long queueTime,
+        QualityInfo quality,
+        boolean isFinal) {
       if (!mProducerListener.requiresExtraMap(mProducerContext.getId())) {
         return null;
       }
-      return ImmutableMap.of(
-          QUEUE_TIME_KEY,
-          String.valueOf(queueTime),
-          HAS_GOOD_QUALITY_KEY,
-          String.valueOf(qualityInfo.isOfGoodEnoughQuality()),
-          IS_FINAL_KEY,
-          String.valueOf(isFinal));
+      String queueStr = String.valueOf(queueTime);
+      String qualityStr = String.valueOf(quality.isOfGoodEnoughQuality());
+      String finalStr = String.valueOf(isFinal);
+      if (image instanceof CloseableStaticBitmap) {
+        Bitmap bitmap = ((CloseableStaticBitmap) image).getUnderlyingBitmap();
+        String sizeStr = bitmap.getWidth() + "x" + bitmap.getHeight();
+        return ImmutableMap.of(
+            BITMAP_SIZE_KEY,
+            sizeStr,
+            JobScheduler.QUEUE_TIME_KEY,
+            queueStr,
+            HAS_GOOD_QUALITY_KEY,
+            qualityStr,
+            IS_FINAL_KEY,
+            finalStr);
+      } else {
+        return ImmutableMap.of(
+            JobScheduler.QUEUE_TIME_KEY,
+            queueStr,
+            HAS_GOOD_QUALITY_KEY,
+            qualityStr,
+            IS_FINAL_KEY,
+            finalStr);
+      }
     }
 
     /**
@@ -285,17 +244,17 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
     }
 
     /**
-     * Finishes if not already finished and {@code finish} is specified.
+     * Finishes if not already finished and <code>shouldFinish</code> is specified.
      * <p> If just finished, the intermediate image gets released.
      */
-    private synchronized void maybeFinish(boolean finish) {
-      if (mIsFinished) {
-        return;
+    private void maybeFinish(boolean shouldFinish) {
+      synchronized (ProgressiveDecoder.this) {
+        if (!shouldFinish || mIsFinished) {
+          return;
+        }
+        mIsFinished = true;
       }
-      mIsFinished = finish;
-      if (finish) {
-        closeStoredIntermediateImageBytes();
-      }
+      mJobScheduler.clearJob();
     }
 
     /**
@@ -305,7 +264,7 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
       CloseableReference<CloseableImage> decodedImageRef = CloseableReference.of(decodedImage);
       try {
         maybeFinish(isFinal);
-        mConsumer.onNewResult(decodedImageRef, isFinal);
+        getConsumer().onNewResult(decodedImageRef, isFinal);
       } finally {
         CloseableReference.closeSafely(decodedImageRef);
       }
@@ -316,7 +275,7 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
      */
     private void handleError(Throwable t) {
       maybeFinish(true);
-      mConsumer.onFailure(t);
+      getConsumer().onFailure(t);
     }
 
     /**
@@ -324,54 +283,48 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
      */
     private void handleCancellation() {
       maybeFinish(true);
-      mConsumer.onCancellation();
+      getConsumer().onCancellation();
     }
 
-    /**
-     * All these abstract methods are thread-safe.
-     */
-    @Nullable protected abstract ImageFormat getImageFormat(
-        CloseableReference<PooledByteBuffer> imageBytesRef);
+    protected abstract int getIntermediateImageEndOffset(EncodedImage encodedImage);
 
-    protected abstract int getIntermediateImageEndOffset(
-        CloseableReference<PooledByteBuffer> imageBytesRef);
-
-    protected abstract QualityInfo getQualityInfo(
-        CloseableReference<PooledByteBuffer> imageBytesRef);
+    protected abstract QualityInfo getQualityInfo();
   }
 
-  class LocalImagesProgressiveDecoder extends ProgressiveDecoder {
+  private class LocalImagesProgressiveDecoder extends ProgressiveDecoder {
 
-    @VisibleForTesting LocalImagesProgressiveDecoder(
+    public LocalImagesProgressiveDecoder(
         final Consumer<CloseableReference<CloseableImage>> consumer,
         final ProducerContext producerContext) {
       super(consumer, producerContext);
     }
 
     @Override
-    @Nullable protected ImageFormat getImageFormat(
-        CloseableReference<PooledByteBuffer> imageBytesRef) {
-      return null;
+    protected synchronized boolean updateDecodeJob(EncodedImage encodedImage, boolean isLast) {
+      if (!isLast) {
+        return false;
+      }
+      return super.updateDecodeJob(encodedImage, isLast);
     }
 
     @Override
-    protected int getIntermediateImageEndOffset(
-        CloseableReference<PooledByteBuffer> imageBytesRef) {
-      return imageBytesRef.get().size();
+    protected int getIntermediateImageEndOffset(EncodedImage encodedImage) {
+      return encodedImage.getSize();
     }
 
     @Override
-    protected QualityInfo getQualityInfo(CloseableReference<PooledByteBuffer> imageBytesRef) {
+    protected QualityInfo getQualityInfo() {
       return ImmutableQualityInfo.of(0, false, false);
     }
   }
 
-  class NetworkImagesProgressiveDecoder extends ProgressiveDecoder {
+  private class NetworkImagesProgressiveDecoder extends ProgressiveDecoder {
+
     private final ProgressiveJpegParser mProgressiveJpegParser;
     private final ProgressiveJpegConfig mProgressiveJpegConfig;
-    private int mLastDecodedScanNumber;
+    private int mLastScheduledScanNumber;
 
-    NetworkImagesProgressiveDecoder(
+    public NetworkImagesProgressiveDecoder(
         final Consumer<CloseableReference<CloseableImage>> consumer,
         final ProducerContext producerContext,
         final ProgressiveJpegParser progressiveJpegParser,
@@ -379,35 +332,34 @@ public class DecodeProducer implements Producer<CloseableReference<CloseableImag
       super(consumer, producerContext);
       mProgressiveJpegParser = Preconditions.checkNotNull(progressiveJpegParser);
       mProgressiveJpegConfig = Preconditions.checkNotNull(progressiveJpegConfig);
-      mLastDecodedScanNumber = 0;
+      mLastScheduledScanNumber = 0;
     }
 
     @Override
-    protected void maybeDecodeIntermediateImage(
-        CloseableReference<PooledByteBuffer> imageBytesRef) {
-      Preconditions.checkNotNull(imageBytesRef);
-      if (mProgressiveJpegParser.parseMoreData(imageBytesRef) &&
-          mProgressiveJpegParser.getBestScanNumber() >=
-              mProgressiveJpegConfig.getNextScanNumberToDecode(mLastDecodedScanNumber)) {
-        mLastDecodedScanNumber = mProgressiveJpegParser.getBestScanNumber();
-        super.maybeDecodeIntermediateImage(imageBytesRef);
+    protected synchronized boolean updateDecodeJob(EncodedImage encodedImage, boolean isLast) {
+      boolean ret = super.updateDecodeJob(encodedImage, isLast);
+      if (!isLast && EncodedImage.isValid(encodedImage)) {
+        if (!mProgressiveJpegParser.parseMoreData(encodedImage)) {
+          return false;
+        }
+        int scanNum = mProgressiveJpegParser.getBestScanNumber();
+        if (scanNum <= mLastScheduledScanNumber ||
+            scanNum < mProgressiveJpegConfig.getNextScanNumberToDecode(
+                mLastScheduledScanNumber)) {
+          return false;
+        }
+        mLastScheduledScanNumber = scanNum;
       }
+      return ret;
     }
 
     @Override
-    @Nullable protected ImageFormat getImageFormat(
-        CloseableReference<PooledByteBuffer> imageBytesRef) {
-      return mProgressiveJpegParser.isJpeg() ? ImageFormat.JPEG : ImageFormat.UNKNOWN;
-    }
-
-    @Override
-    protected int getIntermediateImageEndOffset(
-        CloseableReference<PooledByteBuffer> imageBytesRef) {
+    protected int getIntermediateImageEndOffset(EncodedImage encodedImage) {
       return mProgressiveJpegParser.getBestScanEndOffset();
     }
 
     @Override
-    protected QualityInfo getQualityInfo(CloseableReference<PooledByteBuffer> imageBytesRef) {
+    protected QualityInfo getQualityInfo() {
       return mProgressiveJpegConfig.getQualityInfo(mProgressiveJpegParser.getBestScanNumber());
     }
   }

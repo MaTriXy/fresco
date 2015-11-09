@@ -13,22 +13,23 @@ import java.io.File;
 
 import android.content.Context;
 
-import com.facebook.common.file.FileTree;
 import com.facebook.cache.common.CacheErrorLogger;
-import com.facebook.testing.robolectric.v2.WithTestDefaultsRunner;
+import com.facebook.common.file.FileTree;
+import com.facebook.common.internal.Suppliers;
 
-import org.robolectric.Robolectric;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 
 import static org.mockito.Mockito.mock;
 
 /**
  * Test out methods in DefaultDiskStorageSupplier
  */
-@RunWith(WithTestDefaultsRunner.class)
+@RunWith(RobolectricTestRunner.class)
 public class DefaultDiskStorageSupplierTest {
 
   private int mVersion;
@@ -38,7 +39,7 @@ public class DefaultDiskStorageSupplierTest {
 
   @Before
   public void setUp() {
-    mContext = Robolectric.application.getApplicationContext();
+    mContext = RuntimeEnvironment.application.getApplicationContext();
     mVersion = 1;
     mBaseDirectoryName = "base";
     mCacheErrorLogger = mock(CacheErrorLogger.class);
@@ -47,7 +48,9 @@ public class DefaultDiskStorageSupplierTest {
   private DefaultDiskStorageSupplier createSupplier(boolean useFilesDirInsteadOfCacheDir) {
     return new DefaultDiskStorageSupplier(
         mVersion,
-        useFilesDirInsteadOfCacheDir ? mContext.getFilesDir() : mContext.getCacheDir(),
+        useFilesDirInsteadOfCacheDir ?
+            Suppliers.of(mContext.getFilesDir()) :
+            Suppliers.of(mContext.getCacheDir()),
         mBaseDirectoryName,
         mCacheErrorLogger);
   }

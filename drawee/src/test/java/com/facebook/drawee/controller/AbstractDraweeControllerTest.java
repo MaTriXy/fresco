@@ -11,6 +11,7 @@ package com.facebook.drawee.controller;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -18,14 +19,13 @@ import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
 
 import com.facebook.common.executors.CallerThreadExecutor;
-import com.facebook.common.internal.Lists;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.internal.Throwables;
 import com.facebook.datasource.DataSource;
 import com.facebook.datasource.SettableDataSource;
 import com.facebook.drawee.components.DeferredReleaser;
 import com.facebook.drawee.interfaces.SettableDraweeHierarchy;
-import com.facebook.testing.robolectric.v2.WithTestDefaultsRunner;
+import org.robolectric.RobolectricTestRunner;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,11 +35,28 @@ import org.mockito.InOrder;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyFloat;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 /** * Tests for AbstractDraweeController */
-@RunWith(WithTestDefaultsRunner.class)
+@RunWith(RobolectricTestRunner.class)
 public class AbstractDraweeControllerTest {
 
   public static class FakeImageInfo {
@@ -431,7 +448,7 @@ public class AbstractDraweeControllerTest {
   public void testLoadingS_LS() {
     testStreamedLoading(
         new int[]{INTERMEDIATE_LOW, SUCCESS},
-        new int[]{SET_IMAGE_P50, SET_IMAGE_P100});
+        new int[]{SET_IMAGE_P20, SET_IMAGE_P100});
   }
 
   @Test
@@ -452,7 +469,7 @@ public class AbstractDraweeControllerTest {
   public void testLoadingS_LF() {
     testStreamedLoading(
         new int[]{INTERMEDIATE_LOW, FAILURE},
-        new int[]{SET_IMAGE_P50, SET_FAILURE});
+        new int[]{SET_IMAGE_P20, SET_FAILURE});
   }
 
   @Test
@@ -473,7 +490,7 @@ public class AbstractDraweeControllerTest {
   public void testLoadingS_LLS() {
     testStreamedLoading(
         new int[]{INTERMEDIATE_LOW, INTERMEDIATE_LOW, SUCCESS},
-        new int[]{SET_IMAGE_P50, SET_IMAGE_P50, SET_IMAGE_P100});
+        new int[]{SET_IMAGE_P20, SET_IMAGE_P20, SET_IMAGE_P100});
   }
 
   @Test
@@ -487,7 +504,7 @@ public class AbstractDraweeControllerTest {
   public void testLoadingS_LGS() {
     testStreamedLoading(
         new int[]{INTERMEDIATE_LOW, INTERMEDIATE_GOOD, SUCCESS},
-        new int[]{SET_IMAGE_P50, SET_IMAGE_P50, SET_IMAGE_P100});
+        new int[]{SET_IMAGE_P20, SET_IMAGE_P50, SET_IMAGE_P100});
   }
 
   @Test
@@ -605,7 +622,7 @@ public class AbstractDraweeControllerTest {
     // create data source and images
     SettableDataSource<FakeImage> dataSource = SettableDataSource.create();
     when(mDataSourceSupplier.get()).thenReturn(dataSource);
-    List<FakeImage> images = Lists.newArrayList();
+    List<FakeImage> images = new ArrayList<>();
     for (int i = 0; i < n; i++) {
       images.add(FakeImage.create(mock(Drawable.class), mock(FakeImageInfo.class)));
     }
@@ -657,10 +674,12 @@ public class AbstractDraweeControllerTest {
         break;
       case INTERMEDIATE_LOW:
         image.open();
+        dataSource.setProgress(0.2f);
         dataSource.setResult(image, false);
         break;
       case INTERMEDIATE_GOOD:
         image.open();
+        dataSource.setProgress(0.5f);
         dataSource.setResult(image, false);
         break;
       default:
@@ -671,16 +690,16 @@ public class AbstractDraweeControllerTest {
   private void verifyDhInteraction(int dhInteraction, Drawable drawable, boolean wasImmediate) {
     switch (dhInteraction) {
       case IGNORE:
-        verify(mDraweeHierarchy, never()).setImage(eq(drawable), anyBoolean(), anyInt());
+        verify(mDraweeHierarchy, never()).setImage(eq(drawable), anyFloat(), anyBoolean());
         break;
       case SET_IMAGE_P20:
-        verify(mDraweeHierarchy).setImage(eq(drawable), eq(wasImmediate), eq(50));
+        verify(mDraweeHierarchy).setImage(eq(drawable), eq(0.2f), eq(wasImmediate));
         break;
       case SET_IMAGE_P50:
-        verify(mDraweeHierarchy).setImage(eq(drawable), eq(wasImmediate), eq(50));
+        verify(mDraweeHierarchy).setImage(eq(drawable), eq(0.5f), eq(wasImmediate));
         break;
       case SET_IMAGE_P100:
-        verify(mDraweeHierarchy).setImage(eq(drawable), eq(wasImmediate), eq(100));
+        verify(mDraweeHierarchy).setImage(eq(drawable), eq(1.0f), eq(wasImmediate));
         break;
       case SET_FAILURE:
         verify(mDraweeHierarchy).setFailure(any(Throwable.class));

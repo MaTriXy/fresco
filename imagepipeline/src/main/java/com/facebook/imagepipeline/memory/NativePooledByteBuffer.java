@@ -12,8 +12,6 @@ package com.facebook.imagepipeline.memory;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
-import java.io.InputStream;
-
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.references.CloseableReference;
@@ -50,24 +48,21 @@ public class NativePooledByteBuffer implements PooledByteBuffer {
     return mSize;
   }
 
-  /**
-   * Get an input stream for this bytebuffer.
-   * The bytebuffer must be valid (aka not closed); otherwise, a closedException is raised
-   * @return a ByteArrayInputStream for this buf
-   * @throws {@link ClosedException}
-   */
-  @Override
-  public synchronized InputStream getStream() {
-    ensureValid();
-    return new NativeMemoryChunkInputStream(mBufRef.get(), 0, mSize);
-  }
-
   @Override
   public synchronized byte read(int offset) {
     ensureValid();
     Preconditions.checkArgument(offset >= 0);
     Preconditions.checkArgument(offset < mSize);
     return mBufRef.get().read(offset);
+  }
+
+  @Override
+  public synchronized void read(int offset, byte[] buffer, int bufferOffset, int length) {
+    ensureValid();
+    // We need to make sure that PooledByteBuffer's length is preserved.
+    // Al the other bounds checks will be performed by NativeMemoryChunk.read method.
+    Preconditions.checkArgument(offset + length <= mSize);
+    mBufRef.get().read(offset, buffer, bufferOffset, length);
   }
 
   @Override

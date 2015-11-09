@@ -13,7 +13,7 @@ import javax.annotation.Nullable;
 
 import java.util.concurrent.Executor;
 
-import com.facebook.testing.robolectric.v2.WithTestDefaultsRunner;
+import org.robolectric.RobolectricTestRunner;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -24,7 +24,7 @@ import static com.facebook.datasource.DataSourceTestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
-@RunWith(WithTestDefaultsRunner.class)
+@RunWith(RobolectricTestRunner.class)
 public class AbstractDataSourceTest {
 
   public interface Value {
@@ -40,6 +40,11 @@ public class AbstractDataSourceTest {
     @Override
     public boolean setFailure(Throwable throwable) {
       return super.setFailure(throwable);
+    }
+
+    @Override
+    public boolean setProgress(float progress) {
+      return super.setProgress(progress);
     }
 
     @Override

@@ -9,9 +9,8 @@
 
 package com.facebook.imagepipeline.producers;
 
-import android.util.Pair;
-
 import com.facebook.common.references.CloseableReference;
+import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.memory.PooledByteBuffer;
 
 /**
@@ -22,45 +21,39 @@ import com.facebook.imagepipeline.memory.PooledByteBuffer;
  */
 public class RemoveImageTransformMetaDataProducer
     implements Producer<CloseableReference<PooledByteBuffer>> {
-  private final Producer<
-      Pair<CloseableReference<PooledByteBuffer>, ImageTransformMetaData>> mNextProducer;
+  private final Producer<EncodedImage> mInputProducer;
 
   public RemoveImageTransformMetaDataProducer(
-      Producer<Pair<CloseableReference<PooledByteBuffer>, ImageTransformMetaData>> nextProducer) {
-    mNextProducer = nextProducer;
+      Producer<EncodedImage> inputProducer) {
+    mInputProducer = inputProducer;
   }
 
   @Override
   public void produceResults(
       Consumer<CloseableReference<PooledByteBuffer>> consumer,
       ProducerContext context) {
-    mNextProducer.produceResults(new RemoveImageTransformMetaDataConsumer(consumer), context);
+    mInputProducer.produceResults(new RemoveImageTransformMetaDataConsumer(consumer), context);
   }
 
-  private class RemoveImageTransformMetaDataConsumer
-      extends BaseConsumer<Pair<CloseableReference<PooledByteBuffer>, ImageTransformMetaData>> {
-    private final Consumer<CloseableReference<PooledByteBuffer>> mConsumer;
+  private class RemoveImageTransformMetaDataConsumer extends DelegatingConsumer<EncodedImage,
+          CloseableReference<PooledByteBuffer>> {
 
     private RemoveImageTransformMetaDataConsumer(
         Consumer<CloseableReference<PooledByteBuffer>> consumer) {
-      mConsumer = consumer;
+      super(consumer);
     }
 
     @Override
-    protected void onNewResultImpl(
-        Pair<CloseableReference<PooledByteBuffer>, ImageTransformMetaData> newResult,
-        boolean isLast) {
-      mConsumer.onNewResult(newResult == null ? null : newResult.first, isLast);
-    }
-
-    @Override
-    protected void onFailureImpl(Throwable t) {
-      mConsumer.onFailure(t);
-    }
-
-    @Override
-    protected void onCancellationImpl() {
-      mConsumer.onCancellation();
+    protected void onNewResultImpl(EncodedImage newResult, boolean isLast) {
+      CloseableReference<PooledByteBuffer> ret = null;
+      try {
+        if (EncodedImage.isValid(newResult)) {
+          ret = newResult.getByteBufferRef();
+        }
+        getConsumer().onNewResult(ret, isLast);
+      } finally {
+        CloseableReference.closeSafely(ret);
+      }
     }
   }
 }

@@ -11,10 +11,12 @@ package com.facebook.drawee.view;
 
 import javax.annotation.Nullable;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.util.AttributeSet;
 
 import com.facebook.drawee.R;
@@ -30,6 +32,7 @@ import com.facebook.drawee.generic.RoundingParams;
  * Fading animation parameters:
  * @attr ref com.facebook.R.styleable#GenericDraweeView_fadeDuration
  * Images & scale types parameters:
+ * @attr ref com.facebook.R.styleable#GenericDraweeView_viewAspectRatio
  * @attr ref com.facebook.R.styleable#GenericDraweeView_placeholderImage
  * @attr ref com.facebook.R.styleable#GenericDraweeView_placeholderImageScaleType
  * @attr ref com.facebook.R.styleable#GenericDraweeView_retryImage
@@ -79,6 +82,12 @@ public class GenericDraweeView extends DraweeView<GenericDraweeHierarchy> {
     inflateHierarchy(context, attrs);
   }
 
+  @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+  public GenericDraweeView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    super(context, attrs, defStyleAttr, defStyleRes);
+    inflateHierarchy(context, attrs);
+  }
+
   private void inflateHierarchy(Context context, @Nullable AttributeSet attrs) {
     Resources resources = context.getResources();
 
@@ -124,6 +133,11 @@ public class GenericDraweeView extends DraweeView<GenericDraweeHierarchy> {
         fadeDuration = gdhAttrs.getInt(
             R.styleable.GenericDraweeView_fadeDuration,
             fadeDuration);
+
+        // aspect ratio
+        mAspectRatio = gdhAttrs.getFloat(
+            R.styleable.GenericDraweeView_viewAspectRatio,
+            mAspectRatio);
 
         // placeholder image
         placeholderId = gdhAttrs.getResourceId(
@@ -285,8 +299,8 @@ public class GenericDraweeView extends DraweeView<GenericDraweeHierarchy> {
       TypedArray attrs,
       int attrId,
       ScalingUtils.ScaleType defaultScaleType) {
-    String xmlType = attrs.getString(attrId);
-    return (xmlType != null) ? ScalingUtils.ScaleType.fromString(xmlType) : defaultScaleType;
+    int index = attrs.getInt(attrId, -1);
+    return index < 0 ? defaultScaleType : ScalingUtils.ScaleType.values()[index];
   }
 
  /**

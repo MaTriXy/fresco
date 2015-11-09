@@ -17,7 +17,9 @@ import java.io.File;
 import android.net.Uri;
 
 import com.facebook.imagepipeline.common.ImageDecodeOptions;
+import com.facebook.imagepipeline.common.Priority;
 import com.facebook.imagepipeline.common.ResizeOptions;
+import com.facebook.imageutils.BitmapUtil;
 
 /**
  * Immutable object encapsulating everything pipeline has to know about requested image to proceed.
@@ -49,8 +51,14 @@ public class ImageRequest {
   /** Is auto-rotate enabled? */
   private final boolean mAutoRotateEnabled;
 
+  /** Priority levels of this request. */
+  private final Priority mRequestPriority;
+
   /** Lowest level that is permitted to fetch an image from */
   private final RequestLevel mLowestPermittedRequestLevel;
+
+  /** Whether the disk cache should be used for this request */
+  private final boolean mIsDiskCacheEnabled;
 
   /** Postprocessor to run on the output bitmap. */
   private final Postprocessor mPostprocessor;
@@ -75,7 +83,9 @@ public class ImageRequest {
     mResizeOptions = builder.getResizeOptions();
     mAutoRotateEnabled = builder.isAutoRotateEnabled();
 
+    mRequestPriority = builder.getRequestPriority();
     mLowestPermittedRequestLevel = builder.getLowestPermittedRequestLevel();
+    mIsDiskCacheEnabled = builder.isDiskCacheEnabled();
 
     mPostprocessor = builder.getPostprocessor();
   }
@@ -89,11 +99,11 @@ public class ImageRequest {
   }
 
   public int getPreferredWidth() {
-    return (mResizeOptions != null) ? mResizeOptions.width : -1;
+    return (mResizeOptions != null) ? mResizeOptions.width : (int) BitmapUtil.MAX_BITMAP_SIZE;
   }
 
   public int getPreferredHeight() {
-    return (mResizeOptions != null) ? mResizeOptions.height : -1;
+    return (mResizeOptions != null) ? mResizeOptions.height : (int) BitmapUtil.MAX_BITMAP_SIZE;
   }
 
   public @Nullable ResizeOptions getResizeOptions() {
@@ -116,8 +126,16 @@ public class ImageRequest {
     return mLocalThumbnailPreviewsEnabled;
   }
 
+  public Priority getPriority() {
+    return mRequestPriority;
+  }
+
   public RequestLevel getLowestPermittedRequestLevel() {
     return mLowestPermittedRequestLevel;
+  }
+
+  public boolean isDiskCacheEnabled() {
+    return mIsDiskCacheEnabled;
   }
 
   public synchronized File getSourceFile() {
@@ -167,6 +185,10 @@ public class ImageRequest {
 
     public int getValue() {
       return mValue;
+    }
+
+    public static RequestLevel getMax(RequestLevel requestLevel1, RequestLevel requestLevel2) {
+      return requestLevel1.getValue() > requestLevel2.getValue() ? requestLevel1 : requestLevel2;
     }
   }
 }
