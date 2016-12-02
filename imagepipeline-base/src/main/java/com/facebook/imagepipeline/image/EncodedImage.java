@@ -11,20 +11,24 @@ package com.facebook.imagepipeline.image;
 
 import android.util.Pair;
 
+import com.facebook.cache.common.CacheKey;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.references.SharedReference;
+import com.facebook.imageformat.DefaultImageFormats;
 import com.facebook.imageformat.ImageFormat;
 import com.facebook.imageformat.ImageFormatChecker;
 import com.facebook.imagepipeline.memory.PooledByteBuffer;
 import com.facebook.imagepipeline.memory.PooledByteBufferInputStream;
 import com.facebook.imageutils.BitmapUtil;
 import com.facebook.imageutils.JfifUtil;
+import com.facebook.imageutils.WebpUtil;
 
 import java.io.Closeable;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 
 import javax.annotation.Nullable;
@@ -62,6 +66,7 @@ public class EncodedImage implements Closeable {
   private int mHeight = UNKNOWN_HEIGHT;
   private int mSampleSize = DEFAULT_SAMPLE_SIZE;
   private int mStreamSize = UNKNOWN_STREAM_SIZE;
+  private @Nullable CacheKey mEncodedCacheKey;
 
   public EncodedImage(CloseableReference<PooledByteBuffer> pooledByteBufferRef) {
     Preconditions.checkArgument(CloseableReference.isValid(pooledByteBufferRef));
@@ -201,6 +206,14 @@ public class EncodedImage implements Closeable {
   }
 
   /**
+   * Sets the key related to this image for encoded caches
+   * @param encodedCacheKey
+   */
+  public void setEncodedCacheKey(@Nullable CacheKey encodedCacheKey) {
+    mEncodedCacheKey = encodedCacheKey;
+  }
+
+  /**
    * Returns the image format if known, otherwise ImageFormat.UNKNOWN.
    */
   public ImageFormat getImageFormat() {
@@ -241,11 +254,20 @@ public class EncodedImage implements Closeable {
   }
 
   /**
+   * Gets the key to use when storing this image in encoded caches
+   * @return the encoded cache key
+   */
+  @Nullable
+  public CacheKey getEncodedCacheKey() {
+    return mEncodedCacheKey;
+  }
+
+  /**
    * Returns true if the image is a JPEG and its data is already complete at the specified length,
    * false otherwise.
    */
   public boolean isCompleteAt(int length) {
-    if (mImageFormat != ImageFormat.JPEG) {
+    if (mImageFormat != DefaultImageFormats.JPEG) {
       return true;
     }
     // If the image is backed by FileInputStreams return true since they will always be complete.
@@ -279,26 +301,60 @@ public class EncodedImage implements Closeable {
     final ImageFormat imageFormat = ImageFormatChecker.getImageFormat_WrapIOException(
         getInputStream());
     mImageFormat = imageFormat;
-    // Dimensions decoding is not yet supported for WebP since BitmapUtil.decodeDimensions has a
-    // bug where it will return 100x100 for some WebPs even though those are not its actual
-    // dimensions
-    if (!ImageFormat.isWebpFormat(imageFormat)) {
-      Pair<Integer, Integer> dimensions = BitmapUtil.decodeDimensions(getInputStream());
+    // BitmapUtil.decodeDimensions has a bug where it will return 100x100 for some WebPs even though
+    // those are not its actual dimensions
+    final Pair<Integer, Integer> dimensions;
+    if (DefaultImageFormats.isWebpFormat(imageFormat)) {
+      dimensions = readWebPImageSize();
+    } else {
+      dimensions = readImageSize();
+    }
+    if (imageFormat == DefaultImageFormats.JPEG && mRotationAngle == UNKNOWN_ROTATION_ANGLE) {
+      // Load the JPEG rotation angle only if we have the dimensions
+      if (dimensions != null) {
+        mRotationAngle = JfifUtil.getAutoRotateAngleFromOrientation(
+            JfifUtil.getOrientation(getInputStream()));
+      }
+    } else {
+      mRotationAngle = 0;
+    }
+  }
+
+  /**
+   * We get the size from a WebP image
+   */
+  private Pair<Integer, Integer> readWebPImageSize() {
+    final Pair<Integer, Integer> dimensions = WebpUtil.getSize(getInputStream());
+    if (dimensions != null) {
+      mWidth = dimensions.first;
+      mHeight = dimensions.second;
+    }
+    return dimensions;
+  }
+
+  /**
+   * We get the size from a generic image
+   */
+  private Pair<Integer, Integer> readImageSize() {
+    InputStream inputStream = null;
+    Pair<Integer, Integer> dimensions = null;
+    try {
+      inputStream = getInputStream();
+      dimensions = BitmapUtil.decodeDimensions(inputStream);
       if (dimensions != null) {
         mWidth = dimensions.first;
         mHeight = dimensions.second;
-
-        // Load the rotation angle only if we have the dimensions
-        if (imageFormat == ImageFormat.JPEG) {
-          if (mRotationAngle == UNKNOWN_ROTATION_ANGLE) {
-            mRotationAngle = JfifUtil.getAutoRotateAngleFromOrientation(
-                JfifUtil.getOrientation(getInputStream()));
-          }
-        } else {
-          mRotationAngle = 0;
+      }
+    }finally {
+      if (inputStream != null) {
+        try {
+          inputStream.close();
+        } catch (IOException e) {
+          // Head in the sand
         }
       }
     }
+    return dimensions;
   }
 
   /**
@@ -313,6 +369,7 @@ public class EncodedImage implements Closeable {
     mRotationAngle = encodedImage.getRotationAngle();
     mSampleSize = encodedImage.getSampleSize();
     mStreamSize = encodedImage.getSize();
+    mEncodedCacheKey = encodedImage.getEncodedCacheKey();
   }
 
   /**

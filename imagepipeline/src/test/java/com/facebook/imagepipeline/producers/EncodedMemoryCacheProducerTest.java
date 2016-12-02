@@ -34,6 +34,7 @@ import org.mockito.stubbing.*;
 import org.robolectric.*;
 import org.robolectric.annotation.*;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.*;
@@ -56,6 +57,7 @@ public class EncodedMemoryCacheProducerTest {
   @Mock public Consumer mConsumer;
   @Mock public ProducerContext mProducerContext;
   @Mock public ImageRequest mImageRequest;
+  @Mock public Object mCallerContext;
   @Mock public ProducerListener mProducerListener;
   @Mock public Exception mException;
   private MultiCacheKey mCacheKey;
@@ -86,10 +88,11 @@ public class EncodedMemoryCacheProducerTest {
     List<CacheKey> list = new ArrayList<>();
     list.add(new SimpleCacheKey("http://dummy.uri"));
     mCacheKey = new MultiCacheKey(list);
-    when(mCacheKeyFactory.getEncodedCacheKey(mImageRequest)).thenReturn(mCacheKey);
+    when(mCacheKeyFactory.getEncodedCacheKey(mImageRequest, mCallerContext)).thenReturn(mCacheKey);
 
     when(mMemoryCache.cache(mCacheKey, mFinalImageReference)).thenReturn(mFinalImageReferenceClone);
     when(mProducerContext.getImageRequest()).thenReturn(mImageRequest);
+    when(mProducerContext.getCallerContext()).thenReturn(mCallerContext);
     when(mProducerContext.getListener()).thenReturn(mProducerListener);
     when(mProducerListener.requiresExtraMap(mRequestId)).thenReturn(true);
     when(mProducerContext.getId()).thenReturn(mRequestId);
@@ -110,8 +113,10 @@ public class EncodedMemoryCacheProducerTest {
     Assert.assertSame(
         mFinalEncodedImage.getUnderlyingReferenceTestOnly(),
         encodedImage.getUnderlyingReferenceTestOnly());
+    assertEquals(mCacheKey, encodedImage.getEncodedCacheKey());
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
-    Map<String, String> extraMap = ImmutableMap.of(EncodedMemoryCacheProducer.VALUE_FOUND, "true");
+    Map<String, String> extraMap =
+        ImmutableMap.of(EncodedMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "true");
     verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
     Assert.assertFalse(mFinalImageReference.isValid());
   }
@@ -134,7 +139,8 @@ public class EncodedMemoryCacheProducerTest {
     verify(mConsumer).onNewResult(mFinalEncodedImage, true);
     Assert.assertTrue(EncodedImage.isValid(mFinalEncodedImageClone));
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
-    Map<String, String> extraMap = ImmutableMap.of(EncodedMemoryCacheProducer.VALUE_FOUND, "false");
+    Map<String, String> extraMap =
+        ImmutableMap.of(EncodedMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
     verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
   }
 
@@ -145,7 +151,8 @@ public class EncodedMemoryCacheProducerTest {
     mEncodedMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(null, true);
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
-    Map<String, String> extraMap = ImmutableMap.of(EncodedMemoryCacheProducer.VALUE_FOUND, "false");
+    Map<String, String> extraMap =
+        ImmutableMap.of(EncodedMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
     verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
   }
 
@@ -156,7 +163,8 @@ public class EncodedMemoryCacheProducerTest {
     mEncodedMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onFailure(mException);
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
-    Map<String, String> extraMap = ImmutableMap.of(EncodedMemoryCacheProducer.VALUE_FOUND, "false");
+    Map<String, String> extraMap =
+        ImmutableMap.of(EncodedMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
     verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
   }
 
@@ -168,7 +176,8 @@ public class EncodedMemoryCacheProducerTest {
     mEncodedMemoryCacheProducer.produceResults(mConsumer, mProducerContext);
     verify(mConsumer).onNewResult(null, true);
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
-    Map<String, String> extraMap = ImmutableMap.of(EncodedMemoryCacheProducer.VALUE_FOUND, "false");
+    Map<String, String> extraMap =
+        ImmutableMap.of(EncodedMemoryCacheProducer.EXTRA_CACHED_VALUE_FOUND, "false");
     verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, extraMap);
     verifyNoMoreInteractions(mInputProducer);
   }

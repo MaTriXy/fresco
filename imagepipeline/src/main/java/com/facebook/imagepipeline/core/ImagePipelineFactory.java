@@ -11,27 +11,23 @@ package com.facebook.imagepipeline.core;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
-import java.util.concurrent.ScheduledExecutorService;
-
-import android.app.ActivityManager;
 import android.content.Context;
-import android.content.res.Resources;
-import android.graphics.Rect;
 import android.os.Build;
+import android.support.v4.util.Pools;
 
 import com.facebook.cache.common.CacheKey;
 import com.facebook.cache.disk.DiskCacheConfig;
 import com.facebook.cache.disk.DiskStorage;
 import com.facebook.cache.disk.DiskStorageCache;
 import com.facebook.cache.disk.FileCache;
-import com.facebook.common.executors.DefaultSerialExecutorService;
-import com.facebook.common.executors.SerialExecutorService;
-import com.facebook.common.executors.UiThreadImmediateExecutorService;
 import com.facebook.common.internal.AndroidPredicates;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.time.AwakeTimeSinceBootClock;
-import com.facebook.imagepipeline.animated.factory.AnimatedImageFactory;
+import com.facebook.common.internal.Suppliers;
+import com.facebook.common.webp.WebpBitmapFactory;
+import com.facebook.imageformat.ImageFormatChecker;
+import com.facebook.imagepipeline.animated.factory.AnimatedFactory;
 import com.facebook.imagepipeline.animated.factory.AnimatedFactoryProvider;
+import com.facebook.imagepipeline.animated.factory.AnimatedImageFactory;
 import com.facebook.imagepipeline.bitmaps.ArtBitmapFactory;
 import com.facebook.imagepipeline.bitmaps.EmptyJpegGenerator;
 import com.facebook.imagepipeline.bitmaps.GingerbreadBitmapFactory;
@@ -44,6 +40,7 @@ import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.cache.EncodedCountingMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.EncodedMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.MemoryCache;
+import com.facebook.imagepipeline.decoder.DefaultImageDecoder;
 import com.facebook.imagepipeline.decoder.ImageDecoder;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.memory.PoolFactory;
@@ -52,8 +49,10 @@ import com.facebook.imagepipeline.platform.ArtDecoder;
 import com.facebook.imagepipeline.platform.GingerbreadPurgeableDecoder;
 import com.facebook.imagepipeline.platform.KitKatPurgeableDecoder;
 import com.facebook.imagepipeline.platform.PlatformDecoder;
+import com.facebook.imagepipeline.producers.MediaVariationsIndex;
+import com.facebook.imagepipeline.producers.MediaVariationsIndexDatabase;
+import com.facebook.imagepipeline.producers.NoOpMediaVariationsIndex;
 import com.facebook.imagepipeline.producers.ThreadHandoffProducerQueue;
-import com.facebook.imagepipeline.animated.factory.AnimatedFactory;
 
 /**
  * Factory class for the image pipeline.
@@ -108,6 +107,7 @@ public class ImagePipelineFactory {
   private ProducerSequenceFactory mProducerSequenceFactory;
   private BufferedDiskCache mSmallImageBufferedDiskCache;
   private FileCache mSmallImageFileCache;
+  private MediaVariationsIndex mMediaVariationsIndex;
 
   private PlatformBitmapFactory mPlatformBitmapFactory;
   private PlatformDecoder mPlatformDecoder;
@@ -135,7 +135,9 @@ public class ImagePipelineFactory {
       mBitmapCountingMemoryCache =
           BitmapCountingMemoryCacheFactory.get(
               mConfig.getBitmapMemoryCacheParamsSupplier(),
-              mConfig.getMemoryTrimmableRegistry());
+              mConfig.getMemoryTrimmableRegistry(),
+              getPlatformBitmapFactory(),
+              mConfig.getExperiments().isExternalCreatedBitmapLogEnabled());
     }
     return mBitmapCountingMemoryCache;
   }
@@ -167,7 +169,8 @@ public class ImagePipelineFactory {
       mEncodedCountingMemoryCache =
           EncodedCountingMemoryCacheFactory.get(
               mConfig.getEncodedMemoryCacheParamsSupplier(),
-              mConfig.getMemoryTrimmableRegistry());
+              mConfig.getMemoryTrimmableRegistry(),
+              getPlatformBitmapFactory());
     }
     return mEncodedCountingMemoryCache;
   }
@@ -194,10 +197,22 @@ public class ImagePipelineFactory {
         } else {
           animatedImageFactory = null;
         }
-        mImageDecoder = new ImageDecoder(
-            animatedImageFactory,
-            getPlatformDecoder(),
-            mConfig.getBitmapConfig());
+        if (mConfig.getImageDecoderConfig() == null) {
+          mImageDecoder = new DefaultImageDecoder(
+              animatedImageFactory,
+              getPlatformDecoder(),
+              mConfig.getBitmapConfig());
+        } else {
+          mImageDecoder = new DefaultImageDecoder(
+              animatedImageFactory,
+              getPlatformDecoder(),
+              mConfig.getBitmapConfig(),
+              mConfig.getImageDecoderConfig().getCustomImageDecoders());
+          // Add custom image formats if needed
+          ImageFormatChecker.getInstance()
+              .setCustomImageFormatCheckers(
+                  mConfig.getImageDecoderConfig().getCustomImageFormats());
+        }
       }
     }
     return mImageDecoder;
@@ -245,7 +260,8 @@ public class ImagePipelineFactory {
               getMainBufferedDiskCache(),
               getSmallImageBufferedDiskCache(),
               mConfig.getCacheKeyFactory(),
-              mThreadHandoffProducerQueue);
+              mThreadHandoffProducerQueue,
+              Suppliers.of(false));
     }
     return mImagePipeline;
   }
@@ -290,15 +306,17 @@ public class ImagePipelineFactory {
    */
   public static PlatformDecoder buildPlatformDecoder(
       PoolFactory poolFactory,
-      boolean decodeMemoryFileEnabled,
-      boolean webpSupportEnabled) {
+      boolean directWebpDirectDecodingEnabled) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+      int maxNumThreads = poolFactory.getFlexByteArrayPoolMaxNumThreads();
       return new ArtDecoder(
           poolFactory.getBitmapPool(),
-          poolFactory.getFlexByteArrayPoolMaxNumThreads());
+          maxNumThreads,
+          new Pools.SynchronizedPool<>(maxNumThreads));
     } else {
-      if (decodeMemoryFileEnabled && Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-        return new GingerbreadPurgeableDecoder(webpSupportEnabled);
+      if (directWebpDirectDecodingEnabled
+          && Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+        return new GingerbreadPurgeableDecoder();
       } else {
         return new KitKatPurgeableDecoder(poolFactory.getFlexByteArrayPool());
       }
@@ -309,8 +327,7 @@ public class ImagePipelineFactory {
     if (mPlatformDecoder == null) {
       mPlatformDecoder = buildPlatformDecoder(
           mConfig.getPoolFactory(),
-          mConfig.isDecodeMemoryFileEnabled(),
-          mConfig.isWebpSupportEnabled());
+          mConfig.getExperiments().isWebpSupportEnabled());
     }
     return mPlatformDecoder;
   }
@@ -325,16 +342,18 @@ public class ImagePipelineFactory {
               mConfig.getProgressiveJpegConfig(),
               mConfig.isDownsampleEnabled(),
               mConfig.isResizeAndRotateEnabledForNetwork(),
+              mConfig.getExperiments().isDecodeCancellationEnabled(),
               mConfig.getExecutorSupplier(),
               mConfig.getPoolFactory().getPooledByteBufferFactory(),
               getBitmapMemoryCache(),
               getEncodedMemoryCache(),
               getMainBufferedDiskCache(),
               getSmallImageBufferedDiskCache(),
+              getMediaVariationsIndex(),
               mConfig.getCacheKeyFactory(),
               getPlatformBitmapFactory(),
-              mConfig.isDecodeFileDescriptorEnabled(),
-              mConfig.getForceSmallCacheThresholdBytes());
+              mConfig.getExperiments().isDecodeFileDescriptorEnabled(),
+              mConfig.getExperiments().getForceSmallCacheThresholdBytes());
     }
     return mProducerFactory;
   }
@@ -346,9 +365,9 @@ public class ImagePipelineFactory {
               getProducerFactory(),
               mConfig.getNetworkFetcher(),
               mConfig.isResizeAndRotateEnabledForNetwork(),
-              mConfig.isDownsampleEnabled(),
-              mConfig.isWebpSupportEnabled(),
-              mThreadHandoffProducerQueue);
+              mConfig.getExperiments().isWebpSupportEnabled(),
+              mThreadHandoffProducerQueue,
+              mConfig.getExperiments().getUseDownsamplingRatioForResizing());
     }
     return mProducerSequenceFactory;
   }
@@ -381,5 +400,17 @@ public class ImagePipelineFactory {
               mConfig.getImageCacheStatsTracker());
     }
     return mSmallImageBufferedDiskCache;
+  }
+
+  public MediaVariationsIndex getMediaVariationsIndex() {
+    if (mMediaVariationsIndex == null) {
+      mMediaVariationsIndex = mConfig.getExperiments().getMediaVariationsIndexEnabled()
+          ? new MediaVariationsIndexDatabase(mConfig.getContext(),
+              mConfig.getExecutorSupplier().forLocalStorageRead(),
+              mConfig.getExecutorSupplier().forLocalStorageWrite())
+          : new NoOpMediaVariationsIndex();
+    }
+
+    return mMediaVariationsIndex;
   }
 }

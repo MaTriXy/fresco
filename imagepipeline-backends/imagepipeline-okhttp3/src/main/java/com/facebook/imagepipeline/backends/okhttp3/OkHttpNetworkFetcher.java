@@ -54,7 +54,7 @@ public class OkHttpNetworkFetcher extends
   private static final String TOTAL_TIME = "total_time";
   private static final String IMAGE_SIZE = "image_size";
 
-  private final OkHttpClient mOkHttpClient;
+  private final Call.Factory mCallFactory;
 
   private Executor mCancellationExecutor;
 
@@ -62,8 +62,17 @@ public class OkHttpNetworkFetcher extends
    * @param okHttpClient client to use
    */
   public OkHttpNetworkFetcher(OkHttpClient okHttpClient) {
-    mOkHttpClient = okHttpClient;
-    mCancellationExecutor = okHttpClient.dispatcher().executorService();
+    this(okHttpClient, okHttpClient.dispatcher().executorService());
+  }
+
+  /**
+   * @param callFactory custom {@link Call.Factory} for fetching image from the network
+   * @param cancellationExecutor executor on which fetching cancellation is performed if
+   * cancellation is requested from the UI Thread
+   */
+  public OkHttpNetworkFetcher(Call.Factory callFactory, Executor cancellationExecutor) {
+    mCallFactory = callFactory;
+    mCancellationExecutor = cancellationExecutor;
   }
 
   @Override
@@ -82,7 +91,29 @@ public class OkHttpNetworkFetcher extends
         .url(uri.toString())
         .get()
         .build();
-    final Call call = mOkHttpClient.newCall(request);
+    fetchWithRequest(fetchState, callback, request);
+  }
+
+  @Override
+  public void onFetchCompletion(OkHttpNetworkFetchState fetchState, int byteSize) {
+    fetchState.fetchCompleteTime = SystemClock.elapsedRealtime();
+  }
+
+  @Override
+  public Map<String, String> getExtraMap(OkHttpNetworkFetchState fetchState, int byteSize) {
+    Map<String, String> extraMap = new HashMap<>(4);
+    extraMap.put(QUEUE_TIME, Long.toString(fetchState.responseTime - fetchState.submitTime));
+    extraMap.put(FETCH_TIME, Long.toString(fetchState.fetchCompleteTime - fetchState.responseTime));
+    extraMap.put(TOTAL_TIME, Long.toString(fetchState.fetchCompleteTime - fetchState.submitTime));
+    extraMap.put(IMAGE_SIZE, Integer.toString(byteSize));
+    return extraMap;
+  }
+
+  protected void fetchWithRequest(
+      final OkHttpNetworkFetchState fetchState,
+      final Callback callback,
+      final Request request) {
+    final Call call = mCallFactory.newCall(request);
 
     fetchState.getContext().addCallbacks(
         new BaseProducerContextCallbacks() {
@@ -105,12 +136,16 @@ public class OkHttpNetworkFetcher extends
           @Override
           public void onResponse(Call call, Response response) throws IOException {
             fetchState.responseTime = SystemClock.elapsedRealtime();
-            if (!response.isSuccessful()) {
-              handleException(call, new IOException("Unexpected HTTP code " + response), callback);
-              return;
-            }
             final ResponseBody body = response.body();
             try {
+              if (!response.isSuccessful()) {
+                handleException(
+                    call,
+                    new IOException("Unexpected HTTP code " + response),
+                    callback);
+                return;
+              }
+
               long contentLength = body.contentLength();
               if (contentLength < 0) {
                 contentLength = 0;
@@ -132,21 +167,6 @@ public class OkHttpNetworkFetcher extends
             handleException(call, e, callback);
           }
         });
-  }
-
-  @Override
-  public void onFetchCompletion(OkHttpNetworkFetchState fetchState, int byteSize) {
-    fetchState.fetchCompleteTime = SystemClock.elapsedRealtime();
-  }
-
-  @Override
-  public Map<String, String> getExtraMap(OkHttpNetworkFetchState fetchState, int byteSize) {
-    Map<String, String> extraMap = new HashMap<>(4);
-    extraMap.put(QUEUE_TIME, Long.toString(fetchState.responseTime - fetchState.submitTime));
-    extraMap.put(FETCH_TIME, Long.toString(fetchState.fetchCompleteTime - fetchState.responseTime));
-    extraMap.put(TOTAL_TIME, Long.toString(fetchState.fetchCompleteTime - fetchState.submitTime));
-    extraMap.put(IMAGE_SIZE, Integer.toString(byteSize));
-    return extraMap;
   }
 
   /**

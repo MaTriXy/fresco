@@ -13,13 +13,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 import android.net.Uri;
-import android.os.Build;
 
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.media.MediaUtils;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.util.UriUtil;
+import com.facebook.common.webp.WebpSupportStatus;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.memory.PooledByteBuffer;
@@ -46,19 +46,23 @@ import com.facebook.imagepipeline.producers.ThumbnailProducer;
 import com.facebook.imagepipeline.request.ImageRequest;
 
 public class ProducerSequenceFactory {
-  private static final int MAX_SIMULTANEOUS_FILE_FETCH_AND_RESIZE = 5;
 
   private final ProducerFactory mProducerFactory;
   private final NetworkFetcher mNetworkFetcher;
   private final boolean mResizeAndRotateEnabledForNetwork;
   private final boolean mWebpSupportEnabled;
-  private final boolean mDownsampleEnabled;
   private final ThreadHandoffProducerQueue mThreadHandoffProducerQueue;
+  private final boolean mUseDownsamplingRatio;
 
   // Saved sequences
   @VisibleForTesting Producer<CloseableReference<CloseableImage>> mNetworkFetchSequence;
+  @VisibleForTesting Producer<EncodedImage> mBackgroundLocalFileFetchToEncodedMemorySequence;
   @VisibleForTesting Producer<EncodedImage> mBackgroundNetworkFetchToEncodedMemorySequence;
-  @VisibleForTesting Producer<CloseableReference<PooledByteBuffer>> mEncodedImageProducerSequence;
+  @VisibleForTesting Producer<CloseableReference<PooledByteBuffer>>
+      mLocalFileEncodedImageProducerSequence;
+  @VisibleForTesting Producer<CloseableReference<PooledByteBuffer>>
+      mNetworkEncodedImageProducerSequence;
+  @VisibleForTesting Producer<Void> mLocalFileFetchToEncodedMemoryPrefetchSequence;
   @VisibleForTesting Producer<Void> mNetworkFetchToEncodedMemoryPrefetchSequence;
   private Producer<EncodedImage> mCommonNetworkFetchToEncodedMemorySequence;
   @VisibleForTesting Producer<CloseableReference<CloseableImage>> mLocalImageFileFetchSequence;
@@ -78,21 +82,22 @@ public class ProducerSequenceFactory {
       ProducerFactory producerFactory,
       NetworkFetcher networkFetcher,
       boolean resizeAndRotateEnabledForNetwork,
-      boolean downsampleEnabled,
       boolean webpSupportEnabled,
-      ThreadHandoffProducerQueue threadHandoffProducerQueue) {
+      ThreadHandoffProducerQueue threadHandoffProducerQueue,
+      boolean useDownsamplingRatio) {
     mProducerFactory = producerFactory;
     mNetworkFetcher = networkFetcher;
     mResizeAndRotateEnabledForNetwork = resizeAndRotateEnabledForNetwork;
-    mDownsampleEnabled = downsampleEnabled;
     mWebpSupportEnabled = webpSupportEnabled;
     mPostprocessorSequences = new HashMap<>();
     mCloseableImagePrefetchSequences = new HashMap<>();
     mThreadHandoffProducerQueue = threadHandoffProducerQueue;
+    mUseDownsamplingRatio = useDownsamplingRatio;
   }
 
   /**
-   * Returns a sequence that can be used for a request for an encoded image.
+   * Returns a sequence that can be used for a request for an encoded image from either network or
+   * local files.
    *
    * @param imageRequest the request that will be submitted
    * @return the sequence that should be used to process the request
@@ -100,13 +105,44 @@ public class ProducerSequenceFactory {
   public Producer<CloseableReference<PooledByteBuffer>> getEncodedImageProducerSequence(
       ImageRequest imageRequest) {
     validateEncodedImageRequest(imageRequest);
+    final Uri uri = imageRequest.getSourceUri();
+
+    if (UriUtil.isNetworkUri(uri)) {
+      return getNetworkFetchEncodedImageProducerSequence();
+    } else if (UriUtil.isLocalFileUri(uri)) {
+      return getLocalFileFetchEncodedImageProducerSequence();
+    } else {
+      throw new IllegalArgumentException(
+          "Unsupported uri scheme for encoded image fetch! Uri is: " + getShortenedUriString(uri));
+    }
+  }
+
+  /**
+   * Returns a sequence that can be used for a request for an encoded image from network.
+   */
+  public Producer<CloseableReference<PooledByteBuffer>>
+  getNetworkFetchEncodedImageProducerSequence() {
     synchronized (this) {
-      if (mEncodedImageProducerSequence == null) {
-        mEncodedImageProducerSequence = new RemoveImageTransformMetaDataProducer(
+      if (mNetworkEncodedImageProducerSequence == null) {
+        mNetworkEncodedImageProducerSequence = new RemoveImageTransformMetaDataProducer(
             getBackgroundNetworkFetchToEncodedMemorySequence());
       }
     }
-    return mEncodedImageProducerSequence;
+    return mNetworkEncodedImageProducerSequence;
+  }
+
+  /**
+   * Returns a sequence that can be used for a request for an encoded image from a local file.
+   */
+  public Producer<CloseableReference<PooledByteBuffer>>
+  getLocalFileFetchEncodedImageProducerSequence() {
+    synchronized (this) {
+      if (mLocalFileEncodedImageProducerSequence == null) {
+        mLocalFileEncodedImageProducerSequence = new RemoveImageTransformMetaDataProducer(
+            getBackgroundLocalFileFetchToEncodeMemorySequence());
+      }
+    }
+    return mLocalFileEncodedImageProducerSequence;
   }
 
   /**
@@ -120,12 +156,20 @@ public class ProducerSequenceFactory {
    */
   public Producer<Void> getEncodedImagePrefetchProducerSequence(ImageRequest imageRequest) {
     validateEncodedImageRequest(imageRequest);
-    return getNetworkFetchToEncodedMemoryPrefetchSequence();
+    final Uri uri = imageRequest.getSourceUri();
+
+    if (UriUtil.isNetworkUri(uri)) {
+      return getNetworkFetchToEncodedMemoryPrefetchSequence();
+    } else if (UriUtil.isLocalFileUri(uri)) {
+      return getLocalFileFetchToEncodedMemoryPrefetchSequence();
+    } else {
+      throw new IllegalArgumentException(
+          "Unsupported uri scheme for encoded image fetch! Uri is: " + getShortenedUriString(uri));
+    }
   }
 
   private static void validateEncodedImageRequest(ImageRequest imageRequest) {
     Preconditions.checkNotNull(imageRequest);
-    Preconditions.checkArgument(UriUtil.isNetworkUri(imageRequest.getSourceUri()));
     Preconditions.checkArgument(
         imageRequest.getLowestPermittedRequestLevel().getValue() <=
             ImageRequest.RequestLevel.ENCODED_MEMORY_CACHE.getValue());
@@ -182,11 +226,8 @@ public class ProducerSequenceFactory {
     } else if (UriUtil.isDataUri(uri)) {
       return getDataFetchSequence();
     } else {
-      String uriString = uri.toString();
-      if (uriString.length() > 30) {
-        uriString = uriString.substring(0, 30) + "...";
-      }
-      throw new RuntimeException("Unsupported uri scheme! Uri is: " + uriString);
+      throw new IllegalArgumentException(
+          "Unsupported uri scheme! Uri is: " + getShortenedUriString(uri));
     }
   }
 
@@ -207,8 +248,7 @@ public class ProducerSequenceFactory {
    * background-thread hand-off -> multiplex -> encoded cache ->
    * disk cache -> (webp transcode) -> network fetch.
    */
-  private synchronized Producer<EncodedImage>
-  getBackgroundNetworkFetchToEncodedMemorySequence() {
+  private synchronized Producer<EncodedImage> getBackgroundNetworkFetchToEncodedMemorySequence() {
     if (mBackgroundNetworkFetchToEncodedMemorySequence == null) {
       // Use hand-off producer to ensure that we don't do any unnecessary work on the UI thread.
       mBackgroundNetworkFetchToEncodedMemorySequence =
@@ -226,7 +266,7 @@ public class ProducerSequenceFactory {
   private synchronized Producer<Void> getNetworkFetchToEncodedMemoryPrefetchSequence() {
     if (mNetworkFetchToEncodedMemoryPrefetchSequence == null) {
       mNetworkFetchToEncodedMemoryPrefetchSequence =
-          mProducerFactory.newSwallowResultProducer(
+          ProducerFactory.newSwallowResultProducer(
               getBackgroundNetworkFetchToEncodedMemorySequence());
     }
     return mNetworkFetchToEncodedMemoryPrefetchSequence;
@@ -243,13 +283,46 @@ public class ProducerSequenceFactory {
       mCommonNetworkFetchToEncodedMemorySequence =
           ProducerFactory.newAddImageTransformMetaDataProducer(inputProducer);
 
-      if (mResizeAndRotateEnabledForNetwork && !mDownsampleEnabled) {
-        mCommonNetworkFetchToEncodedMemorySequence =
-            mProducerFactory.newResizeAndRotateProducer(
-                mCommonNetworkFetchToEncodedMemorySequence);
-      }
+      mCommonNetworkFetchToEncodedMemorySequence =
+          mProducerFactory.newResizeAndRotateProducer(
+              mCommonNetworkFetchToEncodedMemorySequence,
+              mResizeAndRotateEnabledForNetwork,
+              mUseDownsamplingRatio);
     }
     return mCommonNetworkFetchToEncodedMemorySequence;
+  }
+
+  /**
+   * swallow-result -> background-thread hand-off -> multiplex -> encoded cache ->
+   * disk cache -> (webp transcode) -> local file fetch.
+   */
+  private synchronized Producer<Void> getLocalFileFetchToEncodedMemoryPrefetchSequence() {
+    if (mLocalFileFetchToEncodedMemoryPrefetchSequence == null) {
+      mLocalFileFetchToEncodedMemoryPrefetchSequence =
+          ProducerFactory.newSwallowResultProducer(
+              getBackgroundNetworkFetchToEncodedMemorySequence());
+    }
+    return mLocalFileFetchToEncodedMemoryPrefetchSequence;
+  }
+
+  /**
+   * background-thread hand-off -> multiplex -> encoded cache ->
+   * disk cache -> (webp transcode) -> local file fetch
+   */
+  private synchronized Producer<EncodedImage> getBackgroundLocalFileFetchToEncodeMemorySequence() {
+    if (mBackgroundLocalFileFetchToEncodedMemorySequence == null) {
+      final LocalFileFetchProducer localFileFetchProducer =
+          mProducerFactory.newLocalFileFetchProducer();
+
+      final Producer<EncodedImage> toEncodedMultiplexProducer =
+          newEncodedCacheMultiplexToTranscodeSequence(localFileFetchProducer);
+
+      mBackgroundLocalFileFetchToEncodedMemorySequence =
+          mProducerFactory.newBackgroundThreadHandoffProducer(
+              toEncodedMultiplexProducer,
+              mThreadHandoffProducerQueue);
+    }
+    return mBackgroundLocalFileFetchToEncodedMemorySequence;
   }
 
   /**
@@ -358,13 +431,15 @@ public class ProducerSequenceFactory {
   private synchronized Producer<CloseableReference<CloseableImage>> getDataFetchSequence() {
     if (mDataFetchSequence == null) {
       Producer<EncodedImage> inputProducer = mProducerFactory.newDataFetchProducer();
-      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2 && !mWebpSupportEnabled) {
+      if (WebpSupportStatus.sIsWebpSupportRequired &&
+          (!mWebpSupportEnabled || WebpSupportStatus.sWebpBitmapFactory == null)) {
         inputProducer = mProducerFactory.newWebpTranscodeProducer(inputProducer);
       }
       inputProducer = mProducerFactory.newAddImageTransformMetaDataProducer(inputProducer);
-      if (!mDownsampleEnabled) {
-        inputProducer = mProducerFactory.newResizeAndRotateProducer(inputProducer);
-      }
+      inputProducer = mProducerFactory.newResizeAndRotateProducer(
+          inputProducer,
+          true,
+          mUseDownsamplingRatio);
       mDataFetchSequence = newBitmapCacheGetToDecodeSequence(inputProducer);
     }
     return mDataFetchSequence;
@@ -416,13 +491,22 @@ public class ProducerSequenceFactory {
    */
   private Producer<EncodedImage> newEncodedCacheMultiplexToTranscodeSequence(
       Producer<EncodedImage> inputProducer) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2 && !mWebpSupportEnabled) {
+    if (WebpSupportStatus.sIsWebpSupportRequired &&
+        (!mWebpSupportEnabled || WebpSupportStatus.sWebpBitmapFactory == null)) {
       inputProducer = mProducerFactory.newWebpTranscodeProducer(inputProducer);
     }
-    inputProducer = mProducerFactory.newDiskCacheProducer(inputProducer);
+    inputProducer = newDiskCacheSequence(inputProducer);
     EncodedMemoryCacheProducer encodedMemoryCacheProducer =
         mProducerFactory.newEncodedMemoryCacheProducer(inputProducer);
     return mProducerFactory.newEncodedCacheKeyMultiplexProducer(encodedMemoryCacheProducer);
+  }
+
+  private Producer<EncodedImage> newDiskCacheSequence(Producer<EncodedImage> inputProducer) {
+    Producer<EncodedImage> cacheWriteProducer =
+        mProducerFactory.newDiskCacheWriteProducer(inputProducer);
+    Producer<EncodedImage> mediaVariationsProducer =
+        mProducerFactory.newMediaVariationsProducer(cacheWriteProducer);
+    return mProducerFactory.newDiskCacheReadProducer(mediaVariationsProducer);
   }
 
   /**
@@ -457,15 +541,14 @@ public class ProducerSequenceFactory {
       ThumbnailProducer<EncodedImage>[] thumbnailProducers) {
     Producer<EncodedImage> localImageProducer =
         ProducerFactory.newAddImageTransformMetaDataProducer(inputProducer);
-    if (!mDownsampleEnabled) {
-      localImageProducer =
-          mProducerFactory.newResizeAndRotateProducer(localImageProducer);
-    }
+    localImageProducer =
+        mProducerFactory.newResizeAndRotateProducer(
+            localImageProducer,
+            true,
+            mUseDownsamplingRatio);
     ThrottlingProducer<EncodedImage>
         localImageThrottlingProducer =
-        mProducerFactory.newThrottlingProducer(
-            MAX_SIMULTANEOUS_FILE_FETCH_AND_RESIZE,
-            localImageProducer);
+        mProducerFactory.newThrottlingProducer(localImageProducer);
     return mProducerFactory.newBranchOnSeparateImagesProducer(
         newLocalThumbnailProducer(thumbnailProducers),
         localImageThrottlingProducer);
@@ -476,11 +559,10 @@ public class ProducerSequenceFactory {
     ThumbnailBranchProducer thumbnailBranchProducer =
         mProducerFactory.newThumbnailBranchProducer(thumbnailProducers);
 
-    if (mDownsampleEnabled) {
-      return thumbnailBranchProducer;
-    } else {
-      return mProducerFactory.newResizeAndRotateProducer(thumbnailBranchProducer);
-    }
+    return mProducerFactory.newResizeAndRotateProducer(
+        thumbnailBranchProducer,
+        true,
+        mUseDownsamplingRatio);
   }
 
   /**
@@ -509,5 +591,10 @@ public class ProducerSequenceFactory {
       mCloseableImagePrefetchSequences.put(inputProducer, swallowResultProducer);
     }
     return mCloseableImagePrefetchSequences.get(inputProducer);
+  }
+
+  private static String getShortenedUriString(Uri uri) {
+    final String uriString = String.valueOf(uri);
+    return uriString.length() > 30 ? uriString.substring(0, 30) + "..." : uriString;
   }
 }

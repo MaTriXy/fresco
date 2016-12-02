@@ -9,7 +9,7 @@
 
 package com.facebook.imagepipeline.common;
 
-import android.graphics.Color;
+import android.graphics.Bitmap;
 
 /**
  * Builder for {@link ImageDecodeOptions}.
@@ -17,13 +17,13 @@ import android.graphics.Color;
 public class ImageDecodeOptionsBuilder {
 
   private int mMinDecodeIntervalMs = 100;
-  private int mBackgroundColor = Color.WHITE;
-  private boolean mForceOldAnimationCode;
   private boolean mDecodePreviewFrame;
   private boolean mUseLastFrameForPreview;
   private boolean mDecodeAllFrames;
+  private boolean mForceStaticImage;
+  private Bitmap.Config mBitmapConfig = Bitmap.Config.ARGB_8888;
 
-  ImageDecodeOptionsBuilder() {
+  public ImageDecodeOptionsBuilder() {
   }
 
   /**
@@ -33,11 +33,11 @@ public class ImageDecodeOptionsBuilder {
    * @return this builder
    */
   public ImageDecodeOptionsBuilder setFrom(ImageDecodeOptions options) {
-    mBackgroundColor = options.backgroundColor;
-    mForceOldAnimationCode = options.forceOldAnimationCode;
     mDecodePreviewFrame = options.decodePreviewFrame;
     mUseLastFrameForPreview = options.useLastFrameForPreview;
     mDecodeAllFrames = options.decodeAllFrames;
+    mForceStaticImage = options.forceStaticImage;
+    mBitmapConfig = options.bitmapConfig;
     return this;
   }
 
@@ -62,50 +62,6 @@ public class ImageDecodeOptionsBuilder {
    */
   public int getMinDecodeIntervalMs() {
     return mMinDecodeIntervalMs;
-  }
-
-  /**
-   * Sets the background color used when converting to image formats that don't support
-   * transparency.
-   *
-   * @param backgroundColor the background color to use
-   * @return this builder
-   */
-  public ImageDecodeOptionsBuilder setBackgroundColor(int backgroundColor) {
-    mBackgroundColor = backgroundColor;
-    return this;
-  }
-
-  /**
-   * Gets the background color used when converting to image formats that don't support
-   * transparency.
-   *
-   * @return the background color to use
-   */
-  public int getBackgroundColor() {
-    return mBackgroundColor;
-  }
-
-  /**
-   * Sets whether to force use of the old animation drawable code that we're in process of
-   * deprecating.
-   *
-   * @param forceOldAnimationCode whether to force use of the old animation drawable code
-   * @return this builder
-   */
-  public ImageDecodeOptionsBuilder setForceOldAnimationCode(boolean forceOldAnimationCode) {
-    mForceOldAnimationCode = forceOldAnimationCode;
-    return this;
-  }
-
-  /**
-   * Gets whether to force use of the old animation drawable code that we're in process of
-   * deprecating.
-   *
-   * @return whether to force use of the old animation drawable code
-   */
-  public boolean getForceOldAnimationCode() {
-    return mForceOldAnimationCode;
   }
 
   /**
@@ -170,6 +126,43 @@ public class ImageDecodeOptionsBuilder {
   public ImageDecodeOptionsBuilder setDecodeAllFrames(boolean decodeAllFrames) {
     mDecodeAllFrames = decodeAllFrames;
     return this;
+  }
+
+  /**
+   * Sets whether to force animated image formats to be decoded as static, non-animated images.
+   *
+   * @param forceStaticImage whether to force the image to be decoded as a static image
+   * @return this builder
+   */
+  public ImageDecodeOptionsBuilder setForceStaticImage(boolean forceStaticImage) {
+    mForceStaticImage = forceStaticImage;
+    return this;
+  }
+
+  /**
+   * Gets whether to force animated image formats to be decoded as static, non-animated images.
+   *
+   * @return whether to force animated image formats to be decoded as static
+   */
+  public boolean getForceStaticImage() {
+    return mForceStaticImage;
+  }
+
+  /**
+   * Gets which config image will be decode with;
+   *
+   * @return which config image will be decode with
+   */
+  public Bitmap.Config getBitmapConfig() {
+    return mBitmapConfig;
+  }
+
+  /**
+   * Sets which config static image will be decode with;
+   * @param bitmapConfig which config static image will be decode with;
+   */
+  public void setBitmapConfig(Bitmap.Config bitmapConfig) {
+    mBitmapConfig = bitmapConfig;
   }
 
   /**

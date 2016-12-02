@@ -15,6 +15,7 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 
+import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.VisibleForTesting;
 
@@ -55,6 +56,14 @@ public class ScaleTypeDrawable extends ForwardingDrawable {
     mScaleType = scaleType;
   }
 
+  @Override
+  public Drawable setCurrent(Drawable newDelegate) {
+    final Drawable previousDelegate = super.setCurrent(newDelegate);
+    configureBounds();
+
+    return previousDelegate;
+  }
+
   /**
    * Gets the current scale type.
    * @return scale type
@@ -68,6 +77,10 @@ public class ScaleTypeDrawable extends ForwardingDrawable {
    * @param scaleType scale type to set
    */
   public void setScaleType(ScaleType scaleType) {
+    if (Objects.equal(mScaleType, scaleType)) {
+      return;
+    }
+
     mScaleType = scaleType;
     mScaleTypeState = null;
     configureBounds();
@@ -90,9 +103,14 @@ public class ScaleTypeDrawable extends ForwardingDrawable {
    * @param focusPoint focus point of the image
    */
   public void setFocusPoint(PointF focusPoint) {
+    if (Objects.equal(mFocusPoint, focusPoint)) {
+      return;
+    }
+
     if (mFocusPoint == null) {
       mFocusPoint = new PointF();
     }
+
     mFocusPoint.set(focusPoint);
     configureBounds();
     invalidateSelf();

@@ -18,10 +18,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-
-import com.facebook.common.internal.VisibleForTesting;
-import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Closeables;
+import com.facebook.common.internal.Preconditions;
+import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.logging.FLog;
 
 /**
@@ -65,6 +64,7 @@ import com.facebook.common.logging.FLog;
  */
 public final class CloseableReference<T> implements Cloneable, Closeable {
 
+  private static final String TAG_UNCLOSED = "UnclosedReference";
   private static Class<CloseableReference> TAG = CloseableReference.class;
 
   private static final ResourceReleaser<Closeable> DEFAULT_CLOSEABLE_RELEASER =
@@ -79,6 +79,9 @@ public final class CloseableReference<T> implements Cloneable, Closeable {
         }
       };
 
+  private static volatile boolean sTraceTracking;
+  private final @Nullable Throwable mObtainedTrace;
+  private @Nullable Throwable mClonedTrace;
 
   @GuardedBy("this")
   private boolean mIsClosed = false;
@@ -92,11 +95,13 @@ public final class CloseableReference<T> implements Cloneable, Closeable {
   private CloseableReference(SharedReference<T> sharedReference) {
     mSharedReference = Preconditions.checkNotNull(sharedReference);
     sharedReference.addReference();
+    mObtainedTrace = getTraceOrNull();
   }
 
   private CloseableReference(T t, ResourceReleaser<T> resourceReleaser) {
     // Ref-count pre-set to 1
     mSharedReference = new SharedReference<T>(t, resourceReleaser);
+    mObtainedTrace = getTraceOrNull();
   }
 
   /**
@@ -161,11 +166,13 @@ public final class CloseableReference<T> implements Cloneable, Closeable {
    */
   @Override
   public synchronized CloseableReference<T> clone() {
+    mClonedTrace = getTraceOrNull();
     Preconditions.checkState(isValid());
     return new CloseableReference<T>(mSharedReference);
   }
 
   public synchronized CloseableReference<T> cloneOrNull() {
+    mClonedTrace = getTraceOrNull();
     return isValid() ? new CloseableReference<T>(mSharedReference) : null;
   }
 
@@ -188,10 +195,20 @@ public final class CloseableReference<T> implements Cloneable, Closeable {
         }
       }
 
-      FLog.w(TAG, "Finalized without closing: %x %x (type = %s)",
-          System.identityHashCode(this),
-          System.identityHashCode(mSharedReference),
-          mSharedReference.get().getClass().getSimpleName());
+      if (sTraceTracking) {
+        Throwable cause = mClonedTrace != null ? mClonedTrace : mObtainedTrace;
+        String message = mClonedTrace != null
+            ? "Finalized without closing! Cause is clone location."
+            : "Finalized without closing! Cause is obtain location.";
+        FLog.wtf(TAG_UNCLOSED, message, cause);
+      } else {
+        FLog.w(
+            TAG,
+            "Finalized without closing: %x %x (type = %s)",
+            System.identityHashCode(this),
+            System.identityHashCode(mSharedReference),
+            mSharedReference.get().getClass().getSimpleName());
+      }
 
       close();
     } finally {
@@ -277,5 +294,16 @@ public final class CloseableReference<T> implements Cloneable, Closeable {
         closeSafely(ref);
       }
     }
+  }
+
+  public static void setTraceTrackingEnabled(boolean enabled) {
+    sTraceTracking = enabled;
+  }
+
+  private static @Nullable Throwable getTraceOrNull() {
+    if (sTraceTracking) {
+      return new Throwable();
+    }
+    return null;
   }
 }
