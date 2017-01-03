@@ -11,26 +11,54 @@ package com.facebook.fresco.animation.bitmap.wrapper;
 import javax.annotation.Nullable;
 
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Rect;
 
+import com.facebook.common.references.CloseableReference;
+import com.facebook.fresco.animation.bitmap.BitmapFrameCache;
 import com.facebook.fresco.animation.bitmap.BitmapFrameRenderer;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableBackend;
+import com.facebook.imagepipeline.animated.impl.AnimatedImageCompositor;
 
 /**
  * {@link BitmapFrameRenderer} that wraps around an {@link AnimatedDrawableBackend}.
  */
 public class AnimatedDrawableBackendFrameRenderer implements BitmapFrameRenderer {
 
-  private AnimatedDrawableBackend mAnimatedDrawableBackend;
+  private final BitmapFrameCache mBitmapFrameCache;
 
-  public AnimatedDrawableBackendFrameRenderer(AnimatedDrawableBackend animatedDrawableBackend) {
+  private AnimatedDrawableBackend mAnimatedDrawableBackend;
+  private AnimatedImageCompositor mAnimatedImageCompositor;
+
+  private final AnimatedImageCompositor.Callback mCallback =
+      new AnimatedImageCompositor.Callback() {
+        @Override
+        public void onIntermediateResult(int frameNumber, Bitmap bitmap) {
+          // We currently don't cache intermediate bitmaps here
+        }
+
+        @Nullable
+        @Override
+        public CloseableReference<Bitmap> getCachedBitmap(int frameNumber) {
+          return mBitmapFrameCache.getCachedFrame(frameNumber);
+        }
+      };
+
+  public AnimatedDrawableBackendFrameRenderer(
+      BitmapFrameCache bitmapFrameCache,
+      AnimatedDrawableBackend animatedDrawableBackend) {
+    mBitmapFrameCache = bitmapFrameCache;
     mAnimatedDrawableBackend = animatedDrawableBackend;
+
+    mAnimatedImageCompositor = new AnimatedImageCompositor(mAnimatedDrawableBackend, mCallback);
   }
 
   @Override
   public void setBounds(@Nullable Rect bounds) {
-    mAnimatedDrawableBackend = mAnimatedDrawableBackend.forNewBounds(bounds);
+    AnimatedDrawableBackend newBackend = mAnimatedDrawableBackend.forNewBounds(bounds);
+    if (newBackend != mAnimatedDrawableBackend) {
+      mAnimatedDrawableBackend = newBackend;
+      mAnimatedImageCompositor = new AnimatedImageCompositor(mAnimatedDrawableBackend, mCallback);
+    }
   }
 
   @Override
@@ -45,8 +73,7 @@ public class AnimatedDrawableBackendFrameRenderer implements BitmapFrameRenderer
 
   @Override
   public boolean renderFrame(int frameNumber, Bitmap targetBitmap) {
-    Canvas canvas = new Canvas(targetBitmap);
-    mAnimatedDrawableBackend.renderFrame(frameNumber, canvas);
+    mAnimatedImageCompositor.renderFrame(frameNumber, targetBitmap);
     return true;
   }
 }

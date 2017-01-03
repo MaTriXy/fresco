@@ -49,7 +49,6 @@ import com.facebook.imagepipeline.producers.LocalResourceFetchProducer;
 import com.facebook.imagepipeline.producers.LocalVideoThumbnailProducer;
 import com.facebook.imagepipeline.producers.MediaVariationsFallbackProducer;
 import com.facebook.imagepipeline.producers.MediaVariationsIndex;
-import com.facebook.imagepipeline.producers.MediaVariationsIndexDatabase;
 import com.facebook.imagepipeline.producers.NetworkFetchProducer;
 import com.facebook.imagepipeline.producers.NetworkFetcher;
 import com.facebook.imagepipeline.producers.NullProducer;
@@ -81,7 +80,6 @@ public class ProducerFactory {
   private final ProgressiveJpegConfig mProgressiveJpegConfig;
   private final boolean mDownsampleEnabled;
   private final boolean mResizeAndRotateEnabledForNetwork;
-  private final boolean mDecodeFileDescriptorEnabled;
   private final boolean mDecodeCancellationEnabled;
 
   // Dependencies used by multiple steps
@@ -95,9 +93,7 @@ public class ProducerFactory {
   private final MemoryCache<CacheKey, PooledByteBuffer> mEncodedMemoryCache;
   private final MemoryCache<CacheKey, CloseableImage> mBitmapMemoryCache;
   private final CacheKeyFactory mCacheKeyFactory;
-  private final Context mContext;
   private MediaVariationsIndex mMediaVariationsIndex;
-  private final int mForceSmallCacheThresholdBytes;
 
   // Postproc dependencies
   private final PlatformBitmapFactory mPlatformBitmapFactory;
@@ -119,10 +115,7 @@ public class ProducerFactory {
       MediaVariationsIndex mediaVariationsIndex,
       CacheKeyFactory cacheKeyFactory,
       PlatformBitmapFactory platformBitmapFactory,
-      boolean decodeFileDescriptorEnabled,
       int forceSmallCacheThresholdBytes) {
-    mContext = context;
-    mForceSmallCacheThresholdBytes = forceSmallCacheThresholdBytes;
     mContentResolver = context.getApplicationContext().getContentResolver();
     mResources = context.getApplicationContext().getResources();
     mAssetManager = context.getApplicationContext().getAssets();
@@ -145,8 +138,6 @@ public class ProducerFactory {
     mCacheKeyFactory = cacheKeyFactory;
 
     mPlatformBitmapFactory = platformBitmapFactory;
-
-    mDecodeFileDescriptorEnabled = decodeFileDescriptorEnabled;
 
     if (forceSmallCacheThresholdBytes > 0) {
       mMainDiskCachePolicy =
@@ -190,7 +181,7 @@ public class ProducerFactory {
   }
 
   public DataFetchProducer newDataFetchProducer() {
-    return new DataFetchProducer(mPooledByteBufferFactory, mDecodeFileDescriptorEnabled);
+    return new DataFetchProducer(mPooledByteBufferFactory);
   }
 
   public DecodeProducer newDecodeProducer(Producer<EncodedImage> inputProducer) {
@@ -244,24 +235,24 @@ public class ProducerFactory {
     return new LocalAssetFetchProducer(
         mExecutorSupplier.forLocalStorageRead(),
         mPooledByteBufferFactory,
-        mAssetManager,
-        mDecodeFileDescriptorEnabled);
+        mAssetManager
+    );
   }
 
   public LocalContentUriFetchProducer newLocalContentUriFetchProducer() {
     return new LocalContentUriFetchProducer(
         mExecutorSupplier.forLocalStorageRead(),
         mPooledByteBufferFactory,
-        mContentResolver,
-        mDecodeFileDescriptorEnabled);
+        mContentResolver
+    );
   }
 
     public LocalContentUriThumbnailFetchProducer newLocalContentUriThumbnailFetchProducer() {
     return new LocalContentUriThumbnailFetchProducer(
         mExecutorSupplier.forLocalStorageRead(),
         mPooledByteBufferFactory,
-        mContentResolver,
-        mDecodeFileDescriptorEnabled);
+        mContentResolver
+    );
   }
 
   public LocalExifThumbnailProducer newLocalExifThumbnailProducer() {
@@ -279,16 +270,16 @@ public class ProducerFactory {
   public LocalFileFetchProducer newLocalFileFetchProducer() {
     return new LocalFileFetchProducer(
         mExecutorSupplier.forLocalStorageRead(),
-        mPooledByteBufferFactory,
-        mDecodeFileDescriptorEnabled);
+        mPooledByteBufferFactory
+    );
   }
 
   public LocalResourceFetchProducer newLocalResourceFetchProducer() {
     return new LocalResourceFetchProducer(
         mExecutorSupplier.forLocalStorageRead(),
         mPooledByteBufferFactory,
-        mResources,
-        mDecodeFileDescriptorEnabled);
+        mResources
+    );
   }
 
   public LocalVideoThumbnailProducer newLocalVideoThumbnailProducer() {
