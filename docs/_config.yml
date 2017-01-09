@@ -1,7 +1,6 @@
 ---
 permalink: /blog/:categories/:year/:month/:day/:title.html
 url: "http://frescolib.org"
-baseurl: ""
 title: Fresco
 tagline: An Image Management Library
 fbappid: "1615782811974223"
@@ -11,6 +10,7 @@ description: >
   Fresco is a powerful system for displaying images in Android applications. It takes care of image loading and display so you don’t have to. Fresco supports Android 2.3 (Gingerbread) and later.
 timezone: America/Los_Angeles
 ghrepo: "facebook/fresco"
+logo: /static/logo.png
 
 current_version: 1.0.0
 
@@ -47,3 +47,17 @@ color:
   # or 'dark'
   primary-overlay: "dark"
   secondary-overlay: "light"
+
+# Gems
+gems:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Set default open graph image for all pages
+defaults:
+  -
+    scope:
+      path: ""
+    values:
+      image: /static/og_image.png
