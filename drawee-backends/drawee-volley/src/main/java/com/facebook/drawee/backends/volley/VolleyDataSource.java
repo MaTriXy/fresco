@@ -11,18 +11,19 @@ package com.facebook.drawee.backends.volley;
 
 import android.graphics.Bitmap;
 import android.net.Uri;
-
+import android.os.Handler;
+import android.os.Looper;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.ImageLoader;
 import com.facebook.datasource.AbstractDataSource;
 import com.facebook.datasource.DataSource;
 import com.facebook.drawee.controller.AbstractDraweeControllerBuilder;
-
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.ImageLoader;
 
 /**
  * {@link DataSource} that wraps Volley {@link ImageLoader}.
  */
 public class VolleyDataSource extends AbstractDataSource<Bitmap> {
+  private final Handler mHandler = new Handler(Looper.getMainLooper());
   private ImageLoader.ImageContainer mImageContainer;
 
   public VolleyDataSource(
@@ -63,7 +64,15 @@ public class VolleyDataSource extends AbstractDataSource<Bitmap> {
   @Override
   public boolean close() {
     if (mImageContainer != null) {
-      mImageContainer.cancelRequest();
+      // Prevent ConcurrentModificationException in Volley
+      mHandler.post(new Runnable() {
+        @Override
+        public void run() {
+          if (mImageContainer != null) {
+            mImageContainer.cancelRequest();
+          }
+        }
+      });
     }
     return super.close();
   }

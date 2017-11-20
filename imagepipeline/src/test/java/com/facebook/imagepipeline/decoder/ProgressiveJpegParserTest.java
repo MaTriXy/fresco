@@ -9,25 +9,23 @@
 
 package com.facebook.imagepipeline.decoder;
 
-import java.io.IOException;
-import java.util.Arrays;
+import static org.junit.Assert.*;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Mockito.*;
 
 import com.facebook.common.internal.ByteStreams;
+import com.facebook.common.memory.ByteArrayPool;
+import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.references.ResourceReleaser;
 import com.facebook.imagepipeline.image.EncodedImage;
-import com.facebook.imagepipeline.memory.ByteArrayPool;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
 import com.facebook.imagepipeline.testing.TrivialPooledByteBuffer;
-
+import java.io.IOException;
+import java.util.Arrays;
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
 import org.robolectric.*;
-
-import static org.junit.Assert.*;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Mockito.*;
 
 @RunWith(RobolectricTestRunner.class)
 public class ProgressiveJpegParserTest {

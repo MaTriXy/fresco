@@ -13,6 +13,7 @@ import android.net.Uri;
 import android.os.Looper;
 import android.os.SystemClock;
 import com.facebook.common.logging.FLog;
+import com.facebook.imagepipeline.common.BytesRange;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.producers.BaseNetworkFetcher;
 import com.facebook.imagepipeline.producers.BaseProducerContextCallbacks;
@@ -86,12 +87,23 @@ public class OkHttpNetworkFetcher extends
   public void fetch(final OkHttpNetworkFetchState fetchState, final Callback callback) {
     fetchState.submitTime = SystemClock.elapsedRealtime();
     final Uri uri = fetchState.getUri();
-    final Request request = new Request.Builder()
-        .cacheControl(new CacheControl.Builder().noStore().build())
-        .url(uri.toString())
-        .get()
-        .build();
-    fetchWithRequest(fetchState, callback, request);
+
+    try {
+      final Request.Builder requestBuilder = new Request.Builder()
+          .cacheControl(new CacheControl.Builder().noStore().build())
+          .url(uri.toString())
+          .get();
+
+      final BytesRange bytesRange = fetchState.getContext().getImageRequest().getBytesRange();
+      if (bytesRange != null) {
+        requestBuilder.addHeader("Range", bytesRange.toHttpRangeHeaderValue());
+      }
+
+      fetchWithRequest(fetchState, callback, requestBuilder.build());
+    } catch (Exception e) {
+      // handle error while creating the request
+      callback.onFailure(e);
+    }
   }
 
   @Override
@@ -144,6 +156,13 @@ public class OkHttpNetworkFetcher extends
                     new IOException("Unexpected HTTP code " + response),
                     callback);
                 return;
+              }
+
+              BytesRange responseRange =
+                  BytesRange.fromContentRangeHeader(response.header("Content-Range"));
+              if (responseRange != null) {
+                fetchState.setResponseBytesRange(responseRange);
+                fetchState.setOnNewResultStatusFlags(Consumer.IS_PARTIAL_RESULT);
               }
 
               long contentLength = body.contentLength();

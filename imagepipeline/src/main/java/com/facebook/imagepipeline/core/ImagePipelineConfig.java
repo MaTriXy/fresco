@@ -9,16 +9,9 @@
 
 package com.facebook.imagepipeline.core;
 
-import javax.annotation.Nullable;
-
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-
 import android.app.ActivityManager;
 import android.content.Context;
 import android.graphics.Bitmap;
-
 import com.facebook.cache.disk.DiskCacheConfig;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
@@ -28,10 +21,11 @@ import com.facebook.common.memory.NoOpMemoryTrimmableRegistry;
 import com.facebook.common.webp.BitmapCreator;
 import com.facebook.common.webp.WebpBitmapFactory;
 import com.facebook.common.webp.WebpSupportStatus;
-import com.facebook.imagepipeline.animated.factory.AnimatedImageFactory;
 import com.facebook.imagepipeline.bitmaps.HoneycombBitmapCreator;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
+import com.facebook.imagepipeline.cache.BitmapMemoryCacheTrimStrategy;
 import com.facebook.imagepipeline.cache.CacheKeyFactory;
+import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.cache.DefaultBitmapMemoryCacheParamsSupplier;
 import com.facebook.imagepipeline.cache.DefaultCacheKeyFactory;
 import com.facebook.imagepipeline.cache.DefaultEncodedMemoryCacheParamsSupplier;
@@ -47,6 +41,10 @@ import com.facebook.imagepipeline.memory.PoolConfig;
 import com.facebook.imagepipeline.memory.PoolFactory;
 import com.facebook.imagepipeline.producers.HttpUrlConnectionNetworkFetcher;
 import com.facebook.imagepipeline.producers.NetworkFetcher;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Master configuration class for the image pipeline library.
@@ -69,9 +67,9 @@ public class ImagePipelineConfig {
   // on demand if needed.
 
   // There are a lot of parameters in this class. Please follow strict alphabetical order.
-  @Nullable private final AnimatedImageFactory mAnimatedImageFactory;
   private final Bitmap.Config mBitmapConfig;
   private final Supplier<MemoryCacheParams> mBitmapMemoryCacheParamsSupplier;
+  private final CountingMemoryCache.CacheTrimStrategy mBitmapMemoryCacheTrimStrategy;
   private final CacheKeyFactory mCacheKeyFactory;
   private final Context mContext;
   private final boolean mDownsampleEnabled;
@@ -99,12 +97,15 @@ public class ImagePipelineConfig {
   private ImagePipelineConfig(Builder builder) {
     // We have to build experiments before the rest
     mImagePipelineExperiments = builder.mExperimentsBuilder.build();
-    mAnimatedImageFactory = builder.mAnimatedImageFactory;
     mBitmapMemoryCacheParamsSupplier =
         builder.mBitmapMemoryCacheParamsSupplier == null ?
             new DefaultBitmapMemoryCacheParamsSupplier(
                 (ActivityManager) builder.mContext.getSystemService(Context.ACTIVITY_SERVICE)) :
             builder.mBitmapMemoryCacheParamsSupplier;
+    mBitmapMemoryCacheTrimStrategy =
+        builder.mBitmapMemoryCacheTrimStrategy == null ?
+            new BitmapMemoryCacheTrimStrategy() :
+            builder.mBitmapMemoryCacheTrimStrategy;
     mBitmapConfig =
         builder.mBitmapConfig == null ?
             Bitmap.Config.ARGB_8888 :
@@ -214,17 +215,16 @@ public class ImagePipelineConfig {
     sDefaultImageRequestConfig = new DefaultImageRequestConfig();
   }
 
-  @Nullable
-  public AnimatedImageFactory getAnimatedImageFactory() {
-    return mAnimatedImageFactory;
-  }
-
   public Bitmap.Config getBitmapConfig() {
     return mBitmapConfig;
   }
 
   public Supplier<MemoryCacheParams> getBitmapMemoryCacheParamsSupplier() {
     return mBitmapMemoryCacheParamsSupplier;
+  }
+
+  public CountingMemoryCache.CacheTrimStrategy getBitmapMemoryCacheTrimStrategy() {
+    return mBitmapMemoryCacheTrimStrategy;
   }
 
   public CacheKeyFactory getCacheKeyFactory() {
@@ -339,9 +339,9 @@ public class ImagePipelineConfig {
 
   public static class Builder {
 
-    private AnimatedImageFactory mAnimatedImageFactory;
     private Bitmap.Config mBitmapConfig;
     private Supplier<MemoryCacheParams> mBitmapMemoryCacheParamsSupplier;
+    private CountingMemoryCache.CacheTrimStrategy mBitmapMemoryCacheTrimStrategy;
     private CacheKeyFactory mCacheKeyFactory;
     private final Context mContext;
     private boolean mDownsampleEnabled = false;
@@ -369,11 +369,6 @@ public class ImagePipelineConfig {
       mContext = Preconditions.checkNotNull(context);
     }
 
-    public Builder setAnimatedImageFactory(AnimatedImageFactory animatedImageFactory) {
-      mAnimatedImageFactory = animatedImageFactory;
-      return this;
-    }
-
     public Builder setBitmapsConfig(Bitmap.Config config) {
       mBitmapConfig = config;
       return this;
@@ -383,6 +378,12 @@ public class ImagePipelineConfig {
         Supplier<MemoryCacheParams> bitmapMemoryCacheParamsSupplier) {
       mBitmapMemoryCacheParamsSupplier =
           Preconditions.checkNotNull(bitmapMemoryCacheParamsSupplier);
+      return this;
+    }
+
+    public Builder setBitmapMemoryCacheTrimStrategy(
+        CountingMemoryCache.CacheTrimStrategy trimStrategy) {
+      mBitmapMemoryCacheTrimStrategy = trimStrategy;
       return this;
     }
 

@@ -9,19 +9,17 @@
 
 package com.facebook.drawee.drawable;
 
+import static org.mockito.Mockito.*;
+
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-
-import org.robolectric.RobolectricTestRunner;
-
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import static org.mockito.Mockito.*;
+import org.robolectric.RobolectricTestRunner;
 
 /**
  * Tests for {@link ForwardingDrawable}
@@ -29,12 +27,12 @@ import static org.mockito.Mockito.*;
 @RunWith(RobolectricTestRunner.class)
 public class ForwardingDrawableTest {
   private Drawable mInnerDrawable;
-  private FakeForwardingDrawable mDrawable;
+  private ForwardingDrawable mDrawable;
 
   @Before
   public void setup() {
     mInnerDrawable = mock(Drawable.class);
-    mDrawable = new FakeForwardingDrawable(mInnerDrawable);
+    mDrawable = new ForwardingDrawable(mInnerDrawable);
     // ForwardingDrawable will call mInnerDrawable.setCallback
     reset(mInnerDrawable);
   }
@@ -43,7 +41,7 @@ public class ForwardingDrawableTest {
   public void testIntrinsicDimensions() {
     when(mInnerDrawable.getIntrinsicWidth()).thenReturn(100);
     when(mInnerDrawable.getIntrinsicHeight()).thenReturn(200);
-    Drawable drawable1 = new FakeForwardingDrawable(mInnerDrawable);
+    Drawable drawable1 = new ForwardingDrawable(mInnerDrawable);
     Assert.assertEquals(100, drawable1.getIntrinsicWidth());
     Assert.assertEquals(200, drawable1.getIntrinsicHeight());
   }
@@ -113,11 +111,5 @@ public class ForwardingDrawableTest {
     verify(newDrawable).setLevel(level);
     verify(newDrawable).setVisible(visible, false);
     verify(newDrawable).setState(stateSet);
-  }
-
-  static class FakeForwardingDrawable extends ForwardingDrawable {
-    public FakeForwardingDrawable(Drawable drawable) {
-      super(drawable);
-    }
   }
 }

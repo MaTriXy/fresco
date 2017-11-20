@@ -9,8 +9,8 @@
 package com.facebook.imagepipeline.core;
 
 import android.os.Process;
-
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * ThreadFactory that applies a priority to the threads it creates.
@@ -18,6 +18,10 @@ import java.util.concurrent.ThreadFactory;
 public class PriorityThreadFactory implements ThreadFactory {
 
   private final int mThreadPriority;
+  private final String mPrefix;
+  private final boolean mAddThreadNumber;
+
+  private final AtomicInteger mThreadNumber = new AtomicInteger(1);
 
   /**
    * Creates a new PriorityThreadFactory with a given priority.
@@ -27,7 +31,13 @@ public class PriorityThreadFactory implements ThreadFactory {
    *
    */
   public PriorityThreadFactory(int threadPriority) {
+    this(threadPriority, "PriorityThreadFactory", true);
+  }
+
+  public PriorityThreadFactory(int threadPriority, String prefix, boolean addThreadNumber) {
     mThreadPriority = threadPriority;
+    this.mPrefix = prefix;
+    this.mAddThreadNumber = addThreadNumber;
   }
 
   @Override
@@ -43,7 +53,13 @@ public class PriorityThreadFactory implements ThreadFactory {
         runnable.run();
       }
     };
-    return new Thread(wrapperRunnable);
+    final String name;
+    if (mAddThreadNumber) {
+      name = mPrefix + "-" + mThreadNumber.getAndIncrement();
+    } else {
+      name = mPrefix;
+    }
+    return new Thread(wrapperRunnable, name);
   }
 
 }

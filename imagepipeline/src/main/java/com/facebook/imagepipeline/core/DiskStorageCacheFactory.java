@@ -9,18 +9,18 @@
 
 package com.facebook.imagepipeline.core;
 
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-
 import com.facebook.cache.disk.DiskCacheConfig;
 import com.facebook.cache.disk.DiskStorage;
 import com.facebook.cache.disk.DiskStorageCache;
 import com.facebook.cache.disk.FileCache;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * Factory for the default implementation of the FileCache.
  */
 public class DiskStorageCacheFactory implements FileCacheFactory {
+
   private DiskStorageFactory mDiskStorageFactory;
 
   public DiskStorageCacheFactory(DiskStorageFactory diskStorageFactory) {

@@ -9,16 +9,15 @@
 
 package com.facebook.imagepipeline.datasource;
 
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
-
 import com.facebook.common.internal.Preconditions;
 import com.facebook.datasource.AbstractDataSource;
+import com.facebook.imagepipeline.listener.RequestListener;
 import com.facebook.imagepipeline.producers.BaseConsumer;
 import com.facebook.imagepipeline.producers.Consumer;
 import com.facebook.imagepipeline.producers.Producer;
 import com.facebook.imagepipeline.producers.SettableProducerContext;
-import com.facebook.imagepipeline.listener.RequestListener;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * DataSource<T> backed by a Producer<T>
@@ -48,8 +47,8 @@ public abstract class AbstractProducerToDataSourceAdapter<T> extends AbstractDat
   private Consumer<T> createConsumer() {
     return new BaseConsumer<T>() {
       @Override
-      protected void onNewResultImpl(@Nullable T newResult, boolean isLast) {
-        AbstractProducerToDataSourceAdapter.this.onNewResultImpl(newResult, isLast);
+      protected void onNewResultImpl(@Nullable T newResult, @Status int status) {
+        AbstractProducerToDataSourceAdapter.this.onNewResultImpl(newResult, status);
       }
 
       @Override
@@ -69,7 +68,8 @@ public abstract class AbstractProducerToDataSourceAdapter<T> extends AbstractDat
     };
   }
 
-  protected void onNewResultImpl(@Nullable T result, boolean isLast) {
+  protected void onNewResultImpl(@Nullable T result, int status) {
+    boolean isLast = BaseConsumer.isLast(status);
     if (super.setResult(result, isLast)) {
       if (isLast) {
         mRequestListener.onRequestSuccess(

@@ -9,14 +9,15 @@
 
 package com.facebook.imagepipeline.producers;
 
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.*;
+
+import com.facebook.common.references.CloseableReference;
+import com.facebook.imagepipeline.image.CloseableImage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-
-import com.facebook.common.references.CloseableReference;
-import com.facebook.imagepipeline.image.CloseableImage;
-
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
@@ -24,9 +25,6 @@ import org.mockito.invocation.*;
 import org.mockito.stubbing.*;
 import org.robolectric.*;
 import org.robolectric.annotation.*;
-
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.*;
 
 /**
  * Checks basic properties of swallow result producer, that is:
@@ -59,7 +57,7 @@ public class SwallowResultProducerTest {
   public void testSwallowResults() {
     setupInputProducerStreamingSuccess();
     mSwallowResultProducer.produceResults(mConsumer, mProducerContext);
-    verify(mConsumer).onNewResult(null, true);
+    verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
     verifyNoMoreInteractions(mConsumer);
   }
 
@@ -67,7 +65,7 @@ public class SwallowResultProducerTest {
   public void testPassOnNullResult() {
     setupInputProducerNotFound();
     mSwallowResultProducer.produceResults(mConsumer, mProducerContext);
-    verify(mConsumer).onNewResult(null, true);
+    verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
     verifyNoMoreInteractions(mConsumer);
   }
 
@@ -125,7 +123,7 @@ public class SwallowResultProducerTest {
       Iterator<CloseableReference<CloseableImage>> iterator = mResults.iterator();
       while (iterator.hasNext()) {
         CloseableReference<CloseableImage> result = iterator.next();
-        consumer.onNewResult(result, !iterator.hasNext());
+        consumer.onNewResult(result, BaseConsumer.simpleStatusForIsLast(!iterator.hasNext()));
       }
       return null;
     }

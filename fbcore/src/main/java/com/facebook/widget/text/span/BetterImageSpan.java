@@ -16,6 +16,8 @@ import android.graphics.drawable.Drawable;
 import android.support.annotation.IntDef;
 import android.text.style.DynamicDrawableSpan;
 import android.text.style.ReplacementSpan;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * A better implementation of image spans that also supports centering images against the text.
@@ -32,6 +34,7 @@ import android.text.style.ReplacementSpan;
 public class BetterImageSpan extends ReplacementSpan {
 
   @IntDef({ALIGN_BASELINE, ALIGN_BOTTOM, ALIGN_CENTER})
+  @Retention(RetentionPolicy.SOURCE)
   public @interface BetterImageSpanAlignment {}
   public static final int ALIGN_BOTTOM = 0;
   public static final int ALIGN_BASELINE = 1;
@@ -105,7 +108,7 @@ public class BetterImageSpan extends ReplacementSpan {
     }
 
     if (offsetBelow > fontMetrics.bottom) {
-      fontMetrics.descent = offsetBelow;
+      fontMetrics.bottom = offsetBelow;
     }
 
     return mWidth;

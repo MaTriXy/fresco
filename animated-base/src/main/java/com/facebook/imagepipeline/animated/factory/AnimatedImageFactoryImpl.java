@@ -13,8 +13,8 @@ import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
-
 import com.facebook.common.internal.Preconditions;
+import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableBackend;
 import com.facebook.imagepipeline.animated.base.AnimatedImage;
@@ -28,8 +28,6 @@ import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.image.ImmutableQualityInfo;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
-
 import java.util.ArrayList;
 import java.util.List;
 

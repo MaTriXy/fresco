@@ -9,13 +9,13 @@
 
 package com.facebook.common.file;
 
-import java.io.File;
-
-import org.junit.Test;
-
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import java.io.File;
+import org.junit.Test;
 
 /**
  * Unit tests for {@link FileUtils}
@@ -30,7 +30,7 @@ public class FileUtilsTest {
     try {
       FileUtils.mkdirs(directory);
     } catch (FileUtils.CreateDirectoryException cde) {
-      assertTrue(false);
+      fail();
     }
   }
 
@@ -43,7 +43,7 @@ public class FileUtilsTest {
     try {
       FileUtils.mkdirs(directory);
     } catch (FileUtils.CreateDirectoryException cde) {
-      assertTrue(false);
+      fail();
     }
   }
 
@@ -55,7 +55,7 @@ public class FileUtilsTest {
     when(directory.delete()).thenReturn(false);
     try {
       FileUtils.mkdirs(directory);
-      assertTrue(false);
+      fail();
     } catch (FileUtils.CreateDirectoryException cde) {
       assertTrue(cde.getCause() instanceof FileUtils.FileDeleteException);
     }
@@ -71,7 +71,7 @@ public class FileUtilsTest {
     try {
       FileUtils.rename(sourceFile, targetFile);
     } catch (FileUtils.RenameException re) {
-      assertTrue(false);
+      fail();
     }
   }
 
@@ -87,7 +87,7 @@ public class FileUtilsTest {
 
     try {
       FileUtils.rename(sourceFile, targetFile);
-      assertTrue(false);
+      fail();
     } catch (FileUtils.RenameException re) {
       assertTrue(re.getCause() instanceof FileUtils.ParentDirNotFoundException);
     }

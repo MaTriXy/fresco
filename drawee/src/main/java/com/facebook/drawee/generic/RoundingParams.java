@@ -9,13 +9,11 @@
 
 package com.facebook.drawee.generic;
 
-import java.util.Arrays;
-
 import android.graphics.Color;
 import android.support.annotation.ColorInt;
-
 import com.facebook.common.internal.Preconditions;
 import com.facebook.drawee.drawable.ScalingUtils;
+import java.util.Arrays;
 
 /**
  * Class that encapsulates rounding parameters.
@@ -35,6 +33,10 @@ public class RoundingParams {
      * method. It doesn't support animations, and it does not support any scale types other than
      * {@link ScalingUtils.ScaleType#CENTER_CROP}, {@link ScalingUtils.ScaleType#FOCUS_CROP} and
      * {@link ScalingUtils.ScaleType#FIT_XY}.
+     *
+     * If you use this rounding method with other scale types, such as
+     * {@link ScalingUtils.ScaleType#CENTER}, you won't get an Exception but the image might look
+     * wrong (e.g. repeated edges), especially in cases the source image is smaller than the view.
      */
     BITMAP_ONLY
   }

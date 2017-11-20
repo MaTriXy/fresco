@@ -12,14 +12,12 @@ package com.facebook.drawee.backends.volley;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.net.Uri;
-
 import com.android.volley.toolbox.ImageLoader;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.datasource.DataSource;
 import com.facebook.drawee.controller.AbstractDraweeControllerBuilder;
 import com.facebook.drawee.controller.ControllerListener;
 import com.facebook.drawee.interfaces.DraweeController;
-
 import java.util.Set;
 
 /**
@@ -81,10 +79,5 @@ public class VolleyDraweeControllerBuilder extends AbstractDraweeControllerBuild
   public VolleyDraweeControllerBuilder setUri(String uriString) {
     Preconditions.checkNotNull(uriString);
     return setImageRequest(Uri.parse(uriString));
-  }
-
-  @Override
-  protected VolleyDraweeControllerBuilder getThis() {
-    return this;
   }
 }

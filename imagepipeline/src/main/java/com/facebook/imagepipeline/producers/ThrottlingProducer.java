@@ -9,14 +9,11 @@
 
 package com.facebook.imagepipeline.producers;
 
-import javax.annotation.concurrent.GuardedBy;
-
+import android.util.Pair;
+import com.facebook.common.internal.Preconditions;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
-
-import android.util.Pair;
-
-import com.facebook.common.internal.Preconditions;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Only permits a configurable number of requests to be kicked off simultaneously. If that number
@@ -80,9 +77,9 @@ public class ThrottlingProducer<T> implements Producer<T> {
     }
 
     @Override
-    protected void onNewResultImpl(T newResult, boolean isLast) {
-      getConsumer().onNewResult(newResult, isLast);
-      if (isLast) {
+    protected void onNewResultImpl(T newResult, @Status int status) {
+      getConsumer().onNewResult(newResult, status);
+      if (isLast(status)) {
         onRequestFinished();
       }
     }

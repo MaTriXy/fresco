@@ -9,16 +9,39 @@
 
 package com.facebook.imagepipeline.producers;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 import com.facebook.imagepipeline.common.Priority;
 import com.facebook.imagepipeline.request.ImageRequest;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * ProducerContext that allows the client to change its internal state.
  */
 @ThreadSafe
 public class SettableProducerContext extends BaseProducerContext {
+
+  public SettableProducerContext(ProducerContext context) {
+    this(
+        context.getImageRequest(),
+        context.getId(),
+        context.getListener(),
+        context.getCallerContext(),
+        context.getLowestPermittedRequestLevel(),
+        context.isPrefetch(),
+        context.isIntermediateResultExpected(),
+        context.getPriority());
+  }
+
+  public SettableProducerContext(ImageRequest overrideRequest, ProducerContext context) {
+    this(
+        overrideRequest,
+        context.getId(),
+        context.getListener(),
+        context.getCallerContext(),
+        context.getLowestPermittedRequestLevel(),
+        context.isPrefetch(),
+        context.isIntermediateResultExpected(),
+        context.getPriority());
+  }
 
   public SettableProducerContext(
       ImageRequest imageRequest,

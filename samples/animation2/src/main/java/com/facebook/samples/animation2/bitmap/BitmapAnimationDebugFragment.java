@@ -25,11 +25,11 @@ import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.ToggleButton;
-
 import com.facebook.fresco.animation.backend.AnimationBackend;
 import com.facebook.fresco.animation.bitmap.BitmapAnimationBackend;
 import com.facebook.fresco.animation.bitmap.BitmapFrameCache;
 import com.facebook.fresco.animation.drawable.AnimatedDrawable2;
+import com.facebook.fresco.animation.drawable.AnimatedDrawable2DebugDrawListener;
 import com.facebook.samples.animation2.R;
 import com.facebook.samples.animation2.SampleData;
 import com.facebook.samples.animation2.utils.AnimationBackendUtils;
@@ -63,9 +63,6 @@ public class BitmapAnimationDebugFragment extends Fragment {
             BitmapAnimationBackend backend,
             int frameNumber,
             @BitmapAnimationBackend.FrameType int frameType) {
-          if (frameNumber == mActiveFrameNumber) {
-            return;
-          }
           FrameInformationHolder previousFrame = mFrameInfoMap.get(mActiveFrameNumber);
           if (previousFrame != null) {
             previousFrame.setFrameType(false, frameType);
@@ -129,11 +126,19 @@ public class BitmapAnimationDebugFragment extends Fragment {
   public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
 
     // Get the animation container
-    ImageView imageView = (ImageView) view.findViewById(R.id.animation_container);
+    final ImageView imageView = (ImageView) view.findViewById(R.id.animation_container);
 
     mFrameInformationContainer = (LinearLayout) view.findViewById(R.id.frame_information);
 
     mAnimatedDrawable = new AnimatedDrawable2();
+    mAnimatedDrawable.setDrawListener(new AnimatedDrawable2DebugDrawListener());
+
+    view.findViewById(R.id.invalidate_button).setOnClickListener(new View.OnClickListener() {
+      @Override
+      public void onClick(View v) {
+        imageView.invalidate();
+      }
+    });
 
     mAnimationControlsManager = new AnimationControlsManager(
         mAnimatedDrawable,
@@ -249,6 +254,7 @@ public class BitmapAnimationDebugFragment extends Fragment {
           frameColor = mFrameFallbackColor;
           text = "fallback frame";
           break;
+        case BitmapAnimationBackend.FRAME_TYPE_UNKNOWN:
         default:
           text = "unknown";
           frameColor = mFrameUnknownColor;

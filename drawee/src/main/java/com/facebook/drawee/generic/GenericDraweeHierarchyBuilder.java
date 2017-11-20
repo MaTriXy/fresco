@@ -9,10 +9,7 @@
 
 package com.facebook.drawee.generic;
 
-import javax.annotation.Nullable;
-
-import java.util.Arrays;
-import java.util.List;
+import static com.facebook.drawee.drawable.ScalingUtils.ScaleType;
 
 import android.content.res.Resources;
 import android.graphics.ColorFilter;
@@ -20,11 +17,10 @@ import android.graphics.Matrix;
 import android.graphics.PointF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.StateListDrawable;
-
 import com.facebook.common.internal.Preconditions;
-import com.facebook.drawee.drawable.ArrayDrawable;
-
-import static com.facebook.drawee.drawable.ScalingUtils.ScaleType;
+import java.util.Arrays;
+import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Class to construct a {@link GenericDraweeHierarchy}.
@@ -511,28 +507,6 @@ public class GenericDraweeHierarchyBuilder {
    */
   public @Nullable ScaleType getActualImageScaleType() {
     return mActualImageScaleType;
-  }
-
-  /**
-   * Sets the transformation matrix, and removes the scale type, for the actual image.
-   *
-   * @param actualImageMatrix matrix for the actual image
-   * @return modified instance of this builder
-   *
-   * @deprecated implement and set a custom {@link ScaleType} instead.
-   */
-  @Deprecated
-  public GenericDraweeHierarchyBuilder setActualImageMatrix(@Nullable Matrix actualImageMatrix) {
-    mActualImageMatrix = actualImageMatrix;
-    mActualImageScaleType = null;
-    return this;
-  }
-
-  /**
-   * Gets the matrix for the actual image.
-   */
-  public @Nullable Matrix getActualImageMatrix() {
-    return mActualImageMatrix;
   }
 
   /**

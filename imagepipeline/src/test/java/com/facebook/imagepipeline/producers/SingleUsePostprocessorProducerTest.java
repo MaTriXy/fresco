@@ -9,12 +9,10 @@
 
 package com.facebook.imagepipeline.producers;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 import android.graphics.Bitmap;
-
 import com.facebook.common.internal.ImmutableMap;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.references.ResourceReleaser;
@@ -26,7 +24,9 @@ import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imagepipeline.request.Postprocessor;
 import com.facebook.imagepipeline.testing.FakeClock;
 import com.facebook.imagepipeline.testing.TestExecutorService;
-
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
@@ -34,9 +34,6 @@ import org.mockito.invocation.*;
 import org.mockito.stubbing.*;
 import org.robolectric.*;
 import org.robolectric.annotation.*;
-
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest= Config.NONE)
@@ -95,7 +92,7 @@ public class SingleUsePostprocessorProducerTest {
             return null;
           }
         }
-    ).when(mConsumer).onNewResult(any(CloseableReference.class), anyBoolean());
+    ).when(mConsumer).onNewResult(any(CloseableReference.class), anyInt());
     mInOrder = inOrder(mPostprocessor, mProducerListener, mConsumer);
 
     mSourceBitmap = mock(Bitmap.class);
@@ -111,7 +108,7 @@ public class SingleUsePostprocessorProducerTest {
   @Test
   public void testIntermediateImageIsNotProcessed() {
     SingleUsePostprocessorConsumer postprocessorConsumer = produceResults();
-    postprocessorConsumer.onNewResult(mSourceCloseableImageRef, false);
+    postprocessorConsumer.onNewResult(mSourceCloseableImageRef, Consumer.NO_FLAGS);
     mSourceCloseableImageRef.close();
     mTestExecutorService.runUntilIdle();
 
@@ -127,7 +124,7 @@ public class SingleUsePostprocessorProducerTest {
     SingleUsePostprocessorConsumer postprocessorConsumer = produceResults();
     doReturn(mDestinationCloseableBitmapRef)
         .when(mPostprocessor).process(mSourceBitmap, mPlatformBitmapFactory);
-    postprocessorConsumer.onNewResult(mSourceCloseableImageRef, true);
+    postprocessorConsumer.onNewResult(mSourceCloseableImageRef, Consumer.IS_LAST);
     mSourceCloseableImageRef.close();
     mTestExecutorService.runUntilIdle();
 
@@ -136,7 +133,7 @@ public class SingleUsePostprocessorProducerTest {
     mInOrder.verify(mProducerListener).requiresExtraMap(mRequestId);
     mInOrder.verify(mProducerListener)
         .onProducerFinishWithSuccess(mRequestId, PostprocessorProducer.NAME, mExtraMap);
-    mInOrder.verify(mConsumer).onNewResult(any(CloseableReference.class), eq(true));
+    mInOrder.verify(mConsumer).onNewResult(any(CloseableReference.class), eq(Consumer.IS_LAST));
     mInOrder.verifyNoMoreInteractions();
 
     assertEquals(1, mResults.size());
@@ -154,7 +151,7 @@ public class SingleUsePostprocessorProducerTest {
     SingleUsePostprocessorConsumer postprocessorConsumer = produceResults();
     doThrow(new RuntimeException())
         .when(mPostprocessor).process(eq(mSourceBitmap), eq(mPlatformBitmapFactory));
-    postprocessorConsumer.onNewResult(mSourceCloseableImageRef, true);
+    postprocessorConsumer.onNewResult(mSourceCloseableImageRef, Consumer.IS_LAST);
     mSourceCloseableImageRef.close();
     mTestExecutorService.runUntilIdle();
 

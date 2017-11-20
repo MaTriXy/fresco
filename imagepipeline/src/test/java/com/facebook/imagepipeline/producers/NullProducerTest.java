@@ -9,13 +9,13 @@
 
 package com.facebook.imagepipeline.producers;
 
+import static org.mockito.Mockito.*;
+
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
 import org.robolectric.*;
 import org.robolectric.annotation.*;
-
-import static org.mockito.Mockito.*;
 
 /**
  * Checks basic properties of NullProducer, that is that it always returns null.
@@ -37,6 +37,6 @@ public class NullProducerTest {
   @Test
   public void testNullProducerReturnsNull() {
     mNullProducer.produceResults(mConsumer, mProducerContext);
-    verify(mConsumer).onNewResult(null, true);
+    verify(mConsumer).onNewResult(null, Consumer.IS_LAST);
   }
 }

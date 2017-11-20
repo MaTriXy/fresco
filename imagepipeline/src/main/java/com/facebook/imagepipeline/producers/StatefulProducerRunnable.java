@@ -9,9 +9,8 @@
 
 package com.facebook.imagepipeline.producers;
 
-import java.util.Map;
-
 import com.facebook.common.executors.StatefulRunnable;
+import java.util.Map;
 
 /**
  * {@link StatefulRunnable} intended to be used by producers.
@@ -46,7 +45,7 @@ public abstract class StatefulProducerRunnable<T>
         mRequestId,
         mProducerName,
         mProducerListener.requiresExtraMap(mRequestId) ? getExtraMapOnSuccess(result) : null);
-    mConsumer.onNewResult(result, true);
+    mConsumer.onNewResult(result, Consumer.IS_LAST);
   }
 
   @Override

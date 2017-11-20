@@ -8,13 +8,12 @@
  */
 package com.facebook.fresco.animation.backend;
 
-import javax.annotation.Nullable;
-
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.IntRange;
+import javax.annotation.Nullable;
 
 /**
  * Animation backend interface that is used to draw frames.
@@ -45,7 +44,7 @@ public interface AnimationBackend extends AnimationInformation {
    *
    * @param alpha the alpha value between 0 and 255
    */
-  void setAlpha(@IntRange(from=0,to=255) int alpha);
+  void setAlpha(@IntRange(from = 0, to = 255) int alpha);
 
   /**
    * The color filter to be used for drawing frames in {@link #drawFrame(Drawable, Canvas, int)}
@@ -91,8 +90,8 @@ public interface AnimationBackend extends AnimationInformation {
 
   /**
    * Get the size of the animation backend.
-   * @return the size in bytes
    *
+   * @return the size in bytes
    */
   int getSizeInBytes();
 

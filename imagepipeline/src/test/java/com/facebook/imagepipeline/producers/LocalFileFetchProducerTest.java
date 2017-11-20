@@ -9,19 +9,20 @@
 
 package com.facebook.imagepipeline.producers;
 
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
+
+import com.facebook.common.memory.PooledByteBuffer;
+import com.facebook.common.memory.PooledByteBufferFactory;
+import com.facebook.imagepipeline.common.Priority;
+import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.imagepipeline.request.ImageRequest;
+import com.facebook.imagepipeline.testing.FakeClock;
+import com.facebook.imagepipeline.testing.TestExecutorService;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-
-import com.facebook.imagepipeline.common.Priority;
-import com.facebook.imagepipeline.image.EncodedImage;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
-import com.facebook.imagepipeline.memory.PooledByteBufferFactory;
-import com.facebook.imagepipeline.request.ImageRequest;
-import com.facebook.imagepipeline.testing.FakeClock;
-import com.facebook.imagepipeline.testing.TestExecutorService;
-
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
@@ -29,9 +30,6 @@ import org.mockito.invocation.*;
 import org.mockito.stubbing.*;
 import org.robolectric.*;
 import org.robolectric.annotation.*;
-
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 /**
  * Basic tests for LocalFileFetchProducer
@@ -85,7 +83,7 @@ public class LocalFileFetchProducerTest {
           }
         })
         .when(mConsumer)
-        .onNewResult(notNull(EncodedImage.class), anyBoolean());
+        .onNewResult(notNull(EncodedImage.class), anyInt());
   }
 
   @Test
@@ -113,6 +111,7 @@ public class LocalFileFetchProducerTest {
     assertSame(pooledByteBuffer, mCapturedEncodedImage.getByteBufferRef().get());
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
     verify(mProducerListener).onProducerFinishWithSuccess(mRequestId, PRODUCER_NAME, null);
+    verify(mProducerListener).onUltimateProducerReached(mRequestId, PRODUCER_NAME, true);
   }
 
   @Test(expected = RuntimeException.class)
@@ -123,6 +122,7 @@ public class LocalFileFetchProducerTest {
     verify(mProducerListener).onProducerStart(mRequestId, PRODUCER_NAME);
     verify(mProducerListener).onProducerFinishWithFailure(
         mRequestId, PRODUCER_NAME, mException, null);
+    verify(mProducerListener).onUltimateProducerReached(mRequestId, PRODUCER_NAME, false);
   }
 
   @After

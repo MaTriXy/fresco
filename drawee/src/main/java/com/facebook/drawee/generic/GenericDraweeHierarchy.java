@@ -9,18 +9,16 @@
 
 package com.facebook.drawee.generic;
 
-import javax.annotation.Nullable;
+import static com.facebook.drawee.drawable.ScalingUtils.ScaleType;
 
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
-import android.graphics.Matrix;
 import android.graphics.PointF;
 import android.graphics.RectF;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-
 import com.facebook.common.internal.Preconditions;
 import com.facebook.drawee.drawable.DrawableParent;
 import com.facebook.drawee.drawable.FadeDrawable;
@@ -28,8 +26,7 @@ import com.facebook.drawee.drawable.ForwardingDrawable;
 import com.facebook.drawee.drawable.MatrixDrawable;
 import com.facebook.drawee.drawable.ScaleTypeDrawable;
 import com.facebook.drawee.interfaces.SettableDraweeHierarchy;
-
-import static com.facebook.drawee.drawable.ScalingUtils.ScaleType;
+import javax.annotation.Nullable;
 
 /**
  * A SettableDraweeHierarchy that displays placeholder image until the actual image is set.
@@ -124,7 +121,6 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
         mActualImageWrapper,
         builder.getActualImageScaleType(),
         builder.getActualImageFocusPoint(),
-        builder.getActualImageMatrix(),
         builder.getActualImageColorFilter());
     layers[PROGRESS_BAR_IMAGE_INDEX] = buildBranch(
         builder.getProgressBarImage(),
@@ -169,11 +165,9 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
       Drawable drawable,
       @Nullable ScaleType scaleType,
       @Nullable PointF focusPoint,
-      @Nullable Matrix matrix,
       @Nullable ColorFilter colorFilter) {
     drawable.setColorFilter(colorFilter);
     drawable = WrappingUtils.maybeWrapWithScaleType(drawable, scaleType, focusPoint);
-    drawable = WrappingUtils.maybeWrapWithMatrix(drawable, matrix);
     return drawable;
   }
 

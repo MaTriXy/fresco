@@ -9,21 +9,18 @@
 
 package com.facebook.imagepipeline.request;
 
-import java.io.File;
+import static org.fest.assertions.api.Assertions.assertThat;
 
 import android.net.Uri;
-
 import com.facebook.imagepipeline.common.ImageDecodeOptionsBuilder;
 import com.facebook.imagepipeline.common.Priority;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.common.RotationOptions;
 import com.facebook.imagepipeline.listener.RequestLoggingListener;
-
+import java.io.File;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-
-import static org.fest.assertions.api.Assertions.assertThat;
 
 @RunWith(RobolectricTestRunner.class)
 public class ImageRequestTest {
@@ -60,7 +57,8 @@ public class ImageRequestTest {
     final File file = new File("/foo/photos/penguin.jpg");
     final ImageRequest imageRequest = ImageRequest.fromFile(file);
 
-    assertThat(imageRequest.getSourceFile()).isEqualTo(file);
+    assertThat(imageRequest.getSourceFile()).isNotNull();
+    assertThat(imageRequest.getSourceFile().getAbsolutePath()).isEqualTo(file.getAbsolutePath());
   }
 
   @Test
@@ -68,14 +66,16 @@ public class ImageRequestTest {
     final File file = new File("/foo/photos folder/penguin crowd.jpg");
     final ImageRequest imageRequest = ImageRequest.fromFile(file);
 
-    assertThat(imageRequest.getSourceFile()).isEqualTo(file);
+    assertThat(imageRequest.getSourceFile()).isNotNull();
+    assertThat(imageRequest.getSourceFile().getAbsolutePath()).isEqualTo(file.getAbsolutePath());
   }
 
   @Test
   public void testImageRequestForLocalFile_withSpecialCharacters() {
-    final File file = new File("/foo/photos#folder/with spaces/penguin?_&*\\...jpg");
+    final File file = new File("/foo/photos#folder/with spaces/penguin?_&*-...jpg");
     final ImageRequest imageRequest = ImageRequest.fromFile(file);
 
-    assertThat(imageRequest.getSourceFile()).isEqualTo(file);
+    assertThat(imageRequest.getSourceFile()).isNotNull();
+    assertThat(imageRequest.getSourceFile().getAbsolutePath()).isEqualTo(file.getAbsolutePath());
   }
 }

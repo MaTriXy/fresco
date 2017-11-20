@@ -9,14 +9,13 @@
 
 package com.facebook.imagepipeline.datasource;
 
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
-
 import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.DataSource;
+import com.facebook.imagepipeline.listener.RequestListener;
 import com.facebook.imagepipeline.producers.Producer;
 import com.facebook.imagepipeline.producers.SettableProducerContext;
-import com.facebook.imagepipeline.listener.RequestListener;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * DataSource<CloseableReference<T>> backed by a Producer<CloseableReference<T>>
@@ -54,7 +53,7 @@ public class CloseableProducerToDataSourceAdapter<T>
   }
 
   @Override
-  protected void onNewResultImpl(CloseableReference<T> result, boolean isLast) {
-    super.onNewResultImpl(CloseableReference.cloneOrNull(result), isLast);
+  protected void onNewResultImpl(CloseableReference<T> result, int status) {
+    super.onNewResultImpl(CloseableReference.cloneOrNull(result), status);
   }
 }

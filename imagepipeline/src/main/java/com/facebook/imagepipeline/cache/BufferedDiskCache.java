@@ -9,6 +9,18 @@
 
 package com.facebook.imagepipeline.cache;
 
+import bolts.Task;
+import com.facebook.binaryresource.BinaryResource;
+import com.facebook.cache.common.CacheKey;
+import com.facebook.cache.common.WriterCallback;
+import com.facebook.cache.disk.FileCache;
+import com.facebook.common.internal.Preconditions;
+import com.facebook.common.logging.FLog;
+import com.facebook.common.memory.PooledByteBuffer;
+import com.facebook.common.memory.PooledByteBufferFactory;
+import com.facebook.common.memory.PooledByteStreams;
+import com.facebook.common.references.CloseableReference;
+import com.facebook.imagepipeline.image.EncodedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -16,20 +28,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.facebook.binaryresource.BinaryResource;
-import com.facebook.cache.common.CacheKey;
-import com.facebook.cache.common.WriterCallback;
-import com.facebook.cache.disk.FileCache;
-import com.facebook.common.internal.Preconditions;
-import com.facebook.common.logging.FLog;
-import com.facebook.common.references.CloseableReference;
-import com.facebook.imagepipeline.image.EncodedImage;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
-import com.facebook.imagepipeline.memory.PooledByteBufferFactory;
-import com.facebook.imagepipeline.memory.PooledByteStreams;
-
-import bolts.Task;
 
 /**
  * BufferedDiskCache provides get and put operations to take care of scheduling disk-cache
@@ -176,7 +174,6 @@ public class BufferedDiskCache {
               if (result != null) {
                 FLog.v(TAG, "Found image for %s in staging area", key.getUriString());
                 mImageCacheStatsTracker.onStagingAreaHit(key);
-                result.setEncodedCacheKey(key);
               } else {
                 FLog.v(TAG, "Did not find image for %s in staging area", key.getUriString());
                 mImageCacheStatsTracker.onStagingAreaMiss();
@@ -186,7 +183,6 @@ public class BufferedDiskCache {
                   CloseableReference<PooledByteBuffer> ref = CloseableReference.of(buffer);
                   try {
                     result = new EncodedImage(ref);
-                    result.setEncodedCacheKey(key);
                   } finally {
                     CloseableReference.closeSafely(ref);
                   }
@@ -231,7 +227,6 @@ public class BufferedDiskCache {
 
     // Store encodedImage in staging area
     mStagingArea.put(key, encodedImage);
-    encodedImage.setEncodedCacheKey(key);
 
     // Write to disk cache. This will be executed on background thread, so increment the ref count.
     // When this write completes (with success/failure), then we will bump down the ref count

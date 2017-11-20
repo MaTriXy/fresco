@@ -9,25 +9,21 @@
 
 package com.facebook.imagepipeline.core;
 
-import javax.annotation.concurrent.NotThreadSafe;
-
 import android.content.Context;
 import android.os.Build;
+import android.support.annotation.Nullable;
 import android.support.v4.util.Pools;
-
 import com.facebook.cache.common.CacheKey;
 import com.facebook.cache.disk.DiskCacheConfig;
-import com.facebook.cache.disk.DiskStorage;
-import com.facebook.cache.disk.DiskStorageCache;
 import com.facebook.cache.disk.FileCache;
 import com.facebook.common.internal.AndroidPredicates;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Suppliers;
-import com.facebook.common.webp.WebpBitmapFactory;
+import com.facebook.common.memory.PooledByteBuffer;
+import com.facebook.common.time.SystemClock;
 import com.facebook.imageformat.ImageFormatChecker;
 import com.facebook.imagepipeline.animated.factory.AnimatedFactory;
 import com.facebook.imagepipeline.animated.factory.AnimatedFactoryProvider;
-import com.facebook.imagepipeline.animated.factory.AnimatedImageFactory;
 import com.facebook.imagepipeline.bitmaps.ArtBitmapFactory;
 import com.facebook.imagepipeline.bitmaps.EmptyJpegGenerator;
 import com.facebook.imagepipeline.bitmaps.GingerbreadBitmapFactory;
@@ -39,20 +35,21 @@ import com.facebook.imagepipeline.cache.BufferedDiskCache;
 import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.cache.EncodedCountingMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.EncodedMemoryCacheFactory;
+import com.facebook.imagepipeline.cache.MediaVariationsIndex;
+import com.facebook.imagepipeline.cache.MediaVariationsIndexDatabase;
 import com.facebook.imagepipeline.cache.MemoryCache;
+import com.facebook.imagepipeline.cache.NoOpMediaVariationsIndex;
 import com.facebook.imagepipeline.decoder.DefaultImageDecoder;
 import com.facebook.imagepipeline.decoder.ImageDecoder;
+import com.facebook.imagepipeline.drawable.DrawableFactory;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.memory.PoolFactory;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
 import com.facebook.imagepipeline.platform.ArtDecoder;
 import com.facebook.imagepipeline.platform.GingerbreadPurgeableDecoder;
 import com.facebook.imagepipeline.platform.KitKatPurgeableDecoder;
 import com.facebook.imagepipeline.platform.PlatformDecoder;
-import com.facebook.imagepipeline.producers.MediaVariationsIndex;
-import com.facebook.imagepipeline.producers.MediaVariationsIndexDatabase;
-import com.facebook.imagepipeline.producers.NoOpMediaVariationsIndex;
 import com.facebook.imagepipeline.producers.ThreadHandoffProducerQueue;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Factory class for the image pipeline.
@@ -69,22 +66,30 @@ public class ImagePipelineFactory {
   private static ImagePipelineFactory sInstance = null;
   private final ThreadHandoffProducerQueue mThreadHandoffProducerQueue;
 
-  /** Gets the instance of {@link ImagePipelineFactory}. */
+  /**
+   * Gets the instance of {@link ImagePipelineFactory}.
+   */
   public static ImagePipelineFactory getInstance() {
     return Preconditions.checkNotNull(sInstance, "ImagePipelineFactory was not initialized!");
   }
 
-  /** Initializes {@link ImagePipelineFactory} with default config. */
+  /**
+   * Initializes {@link ImagePipelineFactory} with default config.
+   */
   public static void initialize(Context context) {
     initialize(ImagePipelineConfig.newBuilder(context).build());
   }
 
-  /** Initializes {@link ImagePipelineFactory} with the specified config. */
+  /**
+   * Initializes {@link ImagePipelineFactory} with the specified config.
+   */
   public static void initialize(ImagePipelineConfig imagePipelineConfig) {
     sInstance = new ImagePipelineFactory(imagePipelineConfig);
   }
 
-  /** Shuts {@link ImagePipelineFactory} down. */
+  /**
+   * Shuts {@link ImagePipelineFactory} down.
+   */
   public static void shutDown() {
     if (sInstance != null) {
       sInstance.getBitmapMemoryCache().removeAll(AndroidPredicates.<CacheKey>True());
@@ -120,24 +125,33 @@ public class ImagePipelineFactory {
         config.getExecutorSupplier().forLightweightBackgroundTasks());
   }
 
-  public AnimatedFactory getAnimatedFactory() {
+  @Nullable
+  private AnimatedFactory getAnimatedFactory() {
     if (mAnimatedFactory == null) {
       mAnimatedFactory = AnimatedFactoryProvider.getAnimatedFactory(
           getPlatformBitmapFactory(),
-          mConfig.getExecutorSupplier());
+          mConfig.getExecutorSupplier(),
+          getBitmapCountingMemoryCache());
     }
     return mAnimatedFactory;
   }
 
+  @Nullable
+  public DrawableFactory getAnimatedDrawableFactory(Context context) {
+    AnimatedFactory animatedFactory = getAnimatedFactory();
+    return animatedFactory == null ? null : animatedFactory.getAnimatedDrawableFactory(context);
+  }
+
   public CountingMemoryCache<CacheKey, CloseableImage>
-      getBitmapCountingMemoryCache() {
+  getBitmapCountingMemoryCache() {
     if (mBitmapCountingMemoryCache == null) {
       mBitmapCountingMemoryCache =
           BitmapCountingMemoryCacheFactory.get(
               mConfig.getBitmapMemoryCacheParamsSupplier(),
               mConfig.getMemoryTrimmableRegistry(),
               getPlatformBitmapFactory(),
-              mConfig.getExperiments().isExternalCreatedBitmapLogEnabled());
+              mConfig.getExperiments().isExternalCreatedBitmapLogEnabled(),
+              mConfig.getBitmapMemoryCacheTrimStrategy());
     }
     return mBitmapCountingMemoryCache;
   }
@@ -179,22 +193,25 @@ public class ImagePipelineFactory {
         mImageDecoder = mConfig.getImageDecoder();
       } else {
         final AnimatedFactory animatedFactory = getAnimatedFactory();
-        final AnimatedImageFactory animatedImageFactory;
+
+        ImageDecoder gifDecoder = null;
+        ImageDecoder webPDecoder = null;
+
         if (animatedFactory != null) {
-          animatedImageFactory = getAnimatedFactory().getAnimatedImageFactory();
-        } else {
-          animatedImageFactory = null;
+          gifDecoder = animatedFactory.getGifDecoder(mConfig.getBitmapConfig());
+          webPDecoder = animatedFactory.getWebPDecoder(mConfig.getBitmapConfig());
         }
+
         if (mConfig.getImageDecoderConfig() == null) {
           mImageDecoder = new DefaultImageDecoder(
-              animatedImageFactory,
-              getPlatformDecoder(),
-              mConfig.getBitmapConfig());
+              gifDecoder,
+              webPDecoder,
+              getPlatformDecoder());
         } else {
           mImageDecoder = new DefaultImageDecoder(
-              animatedImageFactory,
+              gifDecoder,
+              webPDecoder,
               getPlatformDecoder(),
-              mConfig.getBitmapConfig(),
               mConfig.getImageDecoderConfig().getCustomImageDecoders());
           // Add custom image formats if needed
           ImageFormatChecker.getInstance()
@@ -206,7 +223,7 @@ public class ImagePipelineFactory {
     return mImageDecoder;
   }
 
-  private BufferedDiskCache getMainBufferedDiskCache() {
+  public BufferedDiskCache getMainBufferedDiskCache() {
     if (mMainBufferedDiskCache == null) {
       mMainBufferedDiskCache =
           new BufferedDiskCache(
@@ -323,6 +340,7 @@ public class ImagePipelineFactory {
               mConfig.isDownsampleEnabled(),
               mConfig.isResizeAndRotateEnabledForNetwork(),
               mConfig.getExperiments().isDecodeCancellationEnabled(),
+              mConfig.getExperiments().isSmartResizingEnabled(),
               mConfig.getExecutorSupplier(),
               mConfig.getPoolFactory().getPooledByteBufferFactory(),
               getBitmapMemoryCache(),
@@ -332,21 +350,30 @@ public class ImagePipelineFactory {
               getMediaVariationsIndex(),
               mConfig.getCacheKeyFactory(),
               getPlatformBitmapFactory(),
-              mConfig.getExperiments().getForceSmallCacheThresholdBytes());
+              mConfig.getExperiments().getBitmapPrepareToDrawMinSizeBytes(),
+              mConfig.getExperiments().getBitmapPrepareToDrawMaxSizeBytes(),
+              mConfig.getExperiments().getBitmapPrepareToDrawForPrefetch());
     }
     return mProducerFactory;
   }
 
   private ProducerSequenceFactory getProducerSequenceFactory() {
+    // before Android N the Bitmap#prepareToDraw method is no-op so do not need this
+    final boolean useBitmapPrepareToDraw = Build.VERSION.SDK_INT >= 24 //Build.VERSION_CODES.NOUGAT
+        && mConfig.getExperiments().getUseBitmapPrepareToDraw();
+
     if (mProducerSequenceFactory == null) {
       mProducerSequenceFactory =
           new ProducerSequenceFactory(
+              mConfig.getContext().getApplicationContext().getContentResolver(),
               getProducerFactory(),
               mConfig.getNetworkFetcher(),
               mConfig.isResizeAndRotateEnabledForNetwork(),
               mConfig.getExperiments().isWebpSupportEnabled(),
               mThreadHandoffProducerQueue,
-              mConfig.getExperiments().getUseDownsamplingRatioForResizing());
+              mConfig.getExperiments().getUseDownsamplingRatioForResizing(),
+              useBitmapPrepareToDraw,
+              mConfig.getExperiments().isPartialImageCachingEnabled());
     }
     return mProducerSequenceFactory;
   }
@@ -375,11 +402,14 @@ public class ImagePipelineFactory {
 
   public MediaVariationsIndex getMediaVariationsIndex() {
     if (mMediaVariationsIndex == null) {
-      mMediaVariationsIndex = mConfig.getExperiments().getMediaVariationsIndexEnabled()
-          ? new MediaVariationsIndexDatabase(mConfig.getContext(),
-              mConfig.getExecutorSupplier().forLocalStorageRead(),
-              mConfig.getExecutorSupplier().forLocalStorageWrite())
-          : new NoOpMediaVariationsIndex();
+      mMediaVariationsIndex =
+          mConfig.getExperiments().getMediaVariationsIndexEnabled()
+              ? new MediaVariationsIndexDatabase(
+                  mConfig.getContext(),
+                  mConfig.getExecutorSupplier().forLocalStorageRead(),
+                  mConfig.getExecutorSupplier().forLocalStorageWrite(),
+                  SystemClock.get())
+              : new NoOpMediaVariationsIndex();
     }
 
     return mMediaVariationsIndex;

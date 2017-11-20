@@ -8,11 +8,9 @@
  */
 package com.facebook.imagepipeline.listener;
 
-import javax.annotation.Nullable;
-
-import java.util.Map;
-
 import com.facebook.imagepipeline.request.ImageRequest;
+import java.util.Map;
+import javax.annotation.Nullable;
 
 public class BaseRequestListener implements RequestListener {
 
@@ -59,6 +57,10 @@ public class BaseRequestListener implements RequestListener {
   @Override
   public void onProducerFinishWithCancellation(
       String requestId, String producerName, @Nullable Map<String, String> extraMap) {
+  }
+
+  @Override
+  public void onUltimateProducerReached(String requestId, String producerName, boolean successful) {
   }
 
   @Override

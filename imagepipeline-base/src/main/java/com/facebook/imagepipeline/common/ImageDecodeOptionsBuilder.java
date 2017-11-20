@@ -10,6 +10,8 @@
 package com.facebook.imagepipeline.common;
 
 import android.graphics.Bitmap;
+import com.facebook.imagepipeline.decoder.ImageDecoder;
+import javax.annotation.Nullable;
 
 /**
  * Builder for {@link ImageDecodeOptions}.
@@ -22,6 +24,7 @@ public class ImageDecodeOptionsBuilder {
   private boolean mDecodeAllFrames;
   private boolean mForceStaticImage;
   private Bitmap.Config mBitmapConfig = Bitmap.Config.ARGB_8888;
+  private @Nullable ImageDecoder mCustomImageDecoder;
 
   public ImageDecodeOptionsBuilder() {
   }
@@ -38,6 +41,7 @@ public class ImageDecodeOptionsBuilder {
     mDecodeAllFrames = options.decodeAllFrames;
     mForceStaticImage = options.forceStaticImage;
     mBitmapConfig = options.bitmapConfig;
+    mCustomImageDecoder = options.customImageDecoder;
     return this;
   }
 
@@ -140,6 +144,30 @@ public class ImageDecodeOptionsBuilder {
   }
 
   /**
+   * Set a custom image decoder override to be used for the given image.
+   * This will bypass all default decoders and only use the provided custom image decoder
+   * for the given image.
+   *
+   * @param customImageDecoder the custom decoder to use
+   * @return this builder
+   */
+  public ImageDecodeOptionsBuilder setCustomImageDecoder(
+      @Nullable ImageDecoder customImageDecoder) {
+    mCustomImageDecoder = customImageDecoder;
+    return this;
+  }
+
+  /**
+   * Get the custom image decoder, if one has been set.
+   *
+   * @return the custom image decoder or null if not set
+   */
+  @Nullable
+  public ImageDecoder getCustomImageDecoder() {
+    return mCustomImageDecoder;
+  }
+
+  /**
    * Gets whether to force animated image formats to be decoded as static, non-animated images.
    *
    * @return whether to force animated image formats to be decoded as static
@@ -161,8 +189,9 @@ public class ImageDecodeOptionsBuilder {
    * Sets which config static image will be decode with;
    * @param bitmapConfig which config static image will be decode with;
    */
-  public void setBitmapConfig(Bitmap.Config bitmapConfig) {
+  public ImageDecodeOptionsBuilder setBitmapConfig(Bitmap.Config bitmapConfig) {
     mBitmapConfig = bitmapConfig;
+    return this;
   }
 
   /**

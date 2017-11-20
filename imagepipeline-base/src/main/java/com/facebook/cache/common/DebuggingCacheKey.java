@@ -9,6 +9,7 @@
 
 package com.facebook.cache.common;
 
+import android.net.Uri;
 import javax.annotation.Nullable;
 
 /**
@@ -18,14 +19,23 @@ import javax.annotation.Nullable;
 public class DebuggingCacheKey extends SimpleCacheKey {
 
   private final Object mCallerContext;
+  private final Uri mSourceUri;
 
-  public DebuggingCacheKey(String key, @Nullable Object callerContext) {
+  public DebuggingCacheKey(String key, @Nullable Object callerContext, Uri sourceUri) {
     super(key);
     mCallerContext = callerContext;
+    mSourceUri = sourceUri;
   }
 
   @Nullable
   public Object getCallerContext() {
     return mCallerContext;
+  }
+
+  /**
+   * Original URI the image was fetched from.
+   */
+  public Uri getSourceUri() {
+    return mSourceUri;
   }
 }

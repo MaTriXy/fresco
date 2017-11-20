@@ -9,18 +9,16 @@
 
 package com.facebook.imagepipeline.bitmaps;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 import android.annotation.TargetApi;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
-
+import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imageformat.DefaultImageFormats;
 import com.facebook.imagepipeline.image.EncodedImage;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
 import com.facebook.imagepipeline.platform.PlatformDecoder;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Factory implementation for Honeycomb through Kitkat
@@ -62,8 +60,9 @@ public class HoneycombBitmapFactory extends PlatformBitmapFactory {
       EncodedImage encodedImage = new EncodedImage(jpgRef);
       encodedImage.setImageFormat(DefaultImageFormats.JPEG);
       try {
-        CloseableReference<Bitmap> bitmapRef = mPurgeableDecoder.decodeJPEGFromEncodedImage(
-            encodedImage, bitmapConfig, jpgRef.get().size());
+        CloseableReference<Bitmap> bitmapRef =
+            mPurgeableDecoder.decodeJPEGFromEncodedImage(
+                encodedImage, bitmapConfig, null, jpgRef.get().size());
         bitmapRef.get().setHasAlpha(true);
         bitmapRef.get().eraseColor(Color.TRANSPARENT);
         return bitmapRef;

@@ -9,11 +9,11 @@
 
 package com.facebook.common.webp;
 
-import java.io.UnsupportedEncodingException;
-
 import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.util.Base64;
+import java.io.UnsupportedEncodingException;
+import javax.annotation.Nullable;
 
 public class WebpSupportStatus {
   public static final boolean sIsWebpSupportRequired =
@@ -24,13 +24,11 @@ public class WebpSupportStatus {
 
   public static final boolean sIsExtendedWebpSupported = isExtendedWebpSupported();
 
-  public static WebpBitmapFactory sWebpBitmapFactory = null;
-
-  public static boolean sWebpLibraryPresent = false;
+  public static @Nullable WebpBitmapFactory sWebpBitmapFactory = null;
 
   private static boolean sWebpLibraryChecked = false;
 
-  public static WebpBitmapFactory loadWebpBitmapFactoryIfExists() {
+  public static @Nullable WebpBitmapFactory loadWebpBitmapFactoryIfExists() {
     if (sWebpLibraryChecked) {
       return sWebpBitmapFactory;
     }

@@ -8,15 +8,13 @@
  */
 package com.facebook.fresco.animation.bitmap.cache;
 
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
-
 import android.graphics.Bitmap;
-
 import com.facebook.common.references.CloseableReference;
 import com.facebook.fresco.animation.bitmap.BitmapAnimationBackend;
 import com.facebook.fresco.animation.bitmap.BitmapFrameCache;
 import com.facebook.imageutils.BitmapUtil;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Simple bitmap cache that keeps the last frame and reuses it if possible.
@@ -62,6 +60,11 @@ public class KeepLastFrameCache implements BitmapFrameCache {
   }
 
   @Override
+  public synchronized boolean contains(int frameNumber) {
+    return frameNumber == mLastFrameNumber && CloseableReference.isValid(mLastBitmapReference);
+  }
+
+  @Override
   public synchronized int getSizeInBytes() {
     return mLastBitmapReference == null
         ? 0
@@ -76,22 +79,29 @@ public class KeepLastFrameCache implements BitmapFrameCache {
   @Override
   public synchronized void onFrameRendered(
       int frameNumber,
-      CloseableReference<Bitmap> bitmap,
+      CloseableReference<Bitmap> bitmapReference,
       @BitmapAnimationBackend.FrameType int frameType) {
-    if (bitmap != null
+    if (bitmapReference != null
         && mLastBitmapReference != null
-        && bitmap.get().equals(mLastBitmapReference.get())) {
+        && bitmapReference.get().equals(mLastBitmapReference.get())) {
       return;
     }
     CloseableReference.closeSafely(mLastBitmapReference);
     if (mFrameCacheListener != null && mLastFrameNumber != FRAME_NUMBER_UNSET) {
       mFrameCacheListener.onFrameEvicted(this, mLastFrameNumber);
     }
-    mLastBitmapReference = CloseableReference.cloneOrNull(bitmap);
+    mLastBitmapReference = CloseableReference.cloneOrNull(bitmapReference);
     if (mFrameCacheListener != null) {
       mFrameCacheListener.onFrameCached(this, frameNumber);
     }
     mLastFrameNumber = frameNumber;
+  }
+
+  @Override
+  public void onFramePrepared(
+      int frameNumber,
+      CloseableReference<Bitmap> bitmapReference,
+      @BitmapAnimationBackend.FrameType int frameType) {
   }
 
   @Override

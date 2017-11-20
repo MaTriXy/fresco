@@ -8,8 +8,6 @@
  */
 package com.facebook.fresco.animation.drawable;
 
-import javax.annotation.Nullable;
-
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
@@ -17,7 +15,6 @@ import android.graphics.Rect;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
-
 import com.facebook.common.logging.FLog;
 import com.facebook.drawable.base.DrawableWithCaches;
 import com.facebook.drawee.drawable.DrawableProperties;
@@ -25,6 +22,7 @@ import com.facebook.fresco.animation.backend.AnimationBackend;
 import com.facebook.fresco.animation.backend.AnimationInformation;
 import com.facebook.fresco.animation.frame.DropFramesFrameScheduler;
 import com.facebook.fresco.animation.frame.FrameScheduler;
+import javax.annotation.Nullable;
 
 /**
  * Experimental new animated drawable that uses a supplied
@@ -32,9 +30,32 @@ import com.facebook.fresco.animation.frame.FrameScheduler;
  */
 public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableWithCaches {
 
+  /**
+   * {@link #draw(Canvas)} listener that is notified for each draw call. Can be used for debugging.
+   */
+  public interface DrawListener {
+
+    void onDraw(
+        AnimatedDrawable2 animatedDrawable,
+        FrameScheduler frameScheduler,
+        int frameNumberToDraw,
+        boolean frameDrawn,
+        boolean isAnimationRunning,
+        long animationStartTimeMs,
+        long animationTimeMs,
+        long lastFrameAnimationTimeMs,
+        long actualRenderTimeStartMs,
+        long actualRenderTimeEndMs,
+        long startRenderTimeForNextFrameMs,
+        long scheduledRenderTimeForNextFrameMs);
+  }
+
   private static final Class<?> TAG = AnimatedDrawable2.class;
 
   private static final AnimationListener NO_OP_LISTENER = new BaseAnimationListener();
+
+  private static final int DEFAULT_FRAME_SCHEDULING_DELAY_MS = 8;
+  private static final int DEFAULT_FRAME_SCHEDULING_OFFSET_MS = 0;
 
   @Nullable
   private AnimationBackend mAnimationBackend;
@@ -45,12 +66,19 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   private volatile boolean mIsRunning;
   private long mStartTimeMs;
   private long mLastFrameAnimationTimeMs;
+  private long mExpectedRenderTimeMs;
+  private int mLastDrawnFrameNumber;
+
+  private long mFrameSchedulingDelayMs = DEFAULT_FRAME_SCHEDULING_DELAY_MS;
+  private long mFrameSchedulingOffsetMs = DEFAULT_FRAME_SCHEDULING_OFFSET_MS;
 
   // Animation statistics
   private int mDroppedFrames;
 
   // Listeners
   private volatile AnimationListener mAnimationListener = NO_OP_LISTENER;
+  @Nullable
+  private volatile DrawListener mDrawListener = null;
 
   // Holder for drawable properties like alpha to be able to re-apply if the backend changes.
   // The instance is created lazily only if needed.
@@ -108,7 +136,9 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     }
     mIsRunning = true;
     mStartTimeMs = now();
+    mExpectedRenderTimeMs = mStartTimeMs;
     mLastFrameAnimationTimeMs = -1;
+    mLastDrawnFrameNumber = -1;
     invalidateSelf();
     mAnimationListener.onAnimationStart(this);
   }
@@ -123,13 +153,16 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     }
     mIsRunning = false;
     mStartTimeMs = 0;
+    mExpectedRenderTimeMs = mStartTimeMs;
     mLastFrameAnimationTimeMs = -1;
+    mLastDrawnFrameNumber = -1;
     unscheduleSelf(mInvalidateRunnable);
     mAnimationListener.onAnimationStop(this);
   }
 
   /**
    * Check whether the animation is running.
+   *
    * @return true if the animation is currently running
    */
   @Override
@@ -152,7 +185,7 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     }
     long actualRenderTimeStartMs = now();
     long animationTimeMs = mIsRunning
-        ? actualRenderTimeStartMs - mStartTimeMs
+        ? actualRenderTimeStartMs - mStartTimeMs + mFrameSchedulingOffsetMs
         : Math.max(mLastFrameAnimationTimeMs, 0);
 
     // What frame should be drawn?
@@ -160,48 +193,60 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
         animationTimeMs,
         mLastFrameAnimationTimeMs);
 
-    mLastFrameAnimationTimeMs = animationTimeMs;
-
     // Check if the animation is finished and draw last frame if so
     if (frameNumberToDraw == FrameScheduler.FRAME_NUMBER_DONE) {
       frameNumberToDraw = mAnimationBackend.getFrameCount() - 1;
       mAnimationListener.onAnimationStop(this);
       mIsRunning = false;
     } else if (frameNumberToDraw == 0) {
-      mAnimationListener.onAnimationRepeat(this);
+      if (mLastDrawnFrameNumber != -1 && actualRenderTimeStartMs >= mExpectedRenderTimeMs) {
+        mAnimationListener.onAnimationRepeat(this);
+      }
     }
-
-    // Notify listeners that we're about to draw a new frame and
-    // that the animation might be repeated
-    mAnimationListener.onAnimationFrame(this, frameNumberToDraw);
 
     // Draw the frame
     boolean frameDrawn = mAnimationBackend.drawFrame(this, canvas, frameNumberToDraw);
+    if (frameDrawn) {
+      // Notify listeners that we draw a new frame and
+      // that the animation might be repeated
+      mAnimationListener.onAnimationFrame(this, frameNumberToDraw);
+      mLastDrawnFrameNumber = frameNumberToDraw;
+    }
 
     // Log potential dropped frames
     if (!frameDrawn) {
       onFrameDropped();
     }
 
+    long targetRenderTimeForNextFrameMs = FrameScheduler.NO_NEXT_TARGET_RENDER_TIME;
+    long scheduledRenderTimeForNextFrameMs = -1;
+    long actualRenderTimeEnd = now();
     if (mIsRunning) {
-      // Log performance
-      long actualRenderTimeEnd = now();
-      if (FLog.isLoggable(FLog.VERBOSE)) {
-        FLog.v(
-            TAG,
-            "Animation jitter: %s ms. Render time: %s ms. Frame drawn: %s",
-            actualRenderTimeStartMs -
-                (mFrameScheduler.getTargetRenderTimeMs(frameNumberToDraw) + mStartTimeMs),
-            actualRenderTimeEnd - actualRenderTimeStartMs,
-            frameDrawn);
-      }
-      // Schedule the next frame if needed
-      long targetRenderTimeForNextFrameMs =
+      // Schedule the next frame if needed.
+      targetRenderTimeForNextFrameMs =
           mFrameScheduler.getTargetRenderTimeForNextFrameMs(actualRenderTimeEnd - mStartTimeMs);
       if (targetRenderTimeForNextFrameMs != FrameScheduler.NO_NEXT_TARGET_RENDER_TIME) {
-        scheduleNextFrame(targetRenderTimeForNextFrameMs);
+        scheduledRenderTimeForNextFrameMs =
+            targetRenderTimeForNextFrameMs + mFrameSchedulingDelayMs;
+        scheduleNextFrame(scheduledRenderTimeForNextFrameMs);
       }
     }
+    if (mDrawListener != null) {
+      mDrawListener.onDraw(
+          this,
+          mFrameScheduler,
+          frameNumberToDraw,
+          frameDrawn,
+          mIsRunning,
+          mStartTimeMs,
+          animationTimeMs,
+          mLastFrameAnimationTimeMs,
+          actualRenderTimeStartMs,
+          actualRenderTimeEnd,
+          targetRenderTimeForNextFrameMs,
+          scheduledRenderTimeForNextFrameMs);
+    }
+    mLastFrameAnimationTimeMs = animationTimeMs;
   }
 
   @Override
@@ -282,6 +327,7 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
     // In order to jump to a given frame, we have to compute the correct start time
     mLastFrameAnimationTimeMs = mFrameScheduler.getTargetRenderTimeMs(targetFrameNumber);
     mStartTimeMs = now() - mLastFrameAnimationTimeMs;
+    mExpectedRenderTimeMs = mStartTimeMs;
     invalidateSelf();
   }
 
@@ -330,7 +376,30 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
+   * Frame scheduling delay to shift the target render time for a frame within the frame's
+   * visible window. If the value is set to 0, the frame will be scheduled right at the beginning
+   * of the frame's visible window.
+   *
+   * @param frameSchedulingDelayMs the delay to use in ms
+   */
+  public void setFrameSchedulingDelayMs(long frameSchedulingDelayMs) {
+    mFrameSchedulingDelayMs = frameSchedulingDelayMs;
+  }
+
+  /**
+   * Frame scheduling offset to shift the animation time by the given offset.
+   * This is similar to {@link #mFrameSchedulingDelayMs} but instead of delaying the invalidation,
+   * this offsets the animation time by the given value.
+   *
+   * @param frameSchedulingOffsetMs the offset to use in ms
+   */
+  public void setFrameSchedulingOffsetMs(long frameSchedulingOffsetMs) {
+    mFrameSchedulingOffsetMs = frameSchedulingOffsetMs;
+  }
+
+  /**
    * Set an animation listener that is notified for various animation events.
+   *
    * @param animationListener the listener to use
    */
   public void setAnimationListener(@Nullable AnimationListener animationListener) {
@@ -340,12 +409,22 @@ public class AnimatedDrawable2 extends Drawable implements Animatable, DrawableW
   }
 
   /**
+   * Set a draw listener that is notified for each {@link #draw(Canvas)} call.
+   *
+   * @param drawListener the listener to use
+   */
+  public void setDrawListener(@Nullable DrawListener drawListener) {
+    mDrawListener = drawListener;
+  }
+
+  /**
    * Schedule the next frame to be rendered after the given delay.
    *
    * @param targetAnimationTimeMs the time in ms to update the frame
    */
   private void scheduleNextFrame(long targetAnimationTimeMs) {
-    scheduleSelf(mInvalidateRunnable, mStartTimeMs + targetAnimationTimeMs);
+    mExpectedRenderTimeMs = mStartTimeMs + targetAnimationTimeMs;
+    scheduleSelf(mInvalidateRunnable, mExpectedRenderTimeMs);
   }
 
   private void onFrameDropped() {

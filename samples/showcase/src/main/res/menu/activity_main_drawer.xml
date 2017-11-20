@@ -15,6 +15,10 @@
             android:title="@string/drawee_simple_title"
             />
         <item
+            android:id="@+id/nav_drawee_media_picker"
+            android:title="@string/drawee_media_picker_title"
+            />
+        <item
             android:id="@+id/nav_drawee_scaletype"
             android:title="@string/drawee_scale_type_title"
             />
@@ -34,6 +38,14 @@
             android:id="@+id/nav_drawee_rotation"
             android:title="@string/drawee_rotation_title"
             />
+        <item
+            android:id="@+id/nav_drawee_recycler"
+            android:title="@string/drawee_recycler_title"
+            />
+        <item
+            android:id="@+id/nav_drawee_transition"
+            android:title="@string/drawee_transition_title"
+            />
       </group>
     </menu>
   </item>
@@ -41,6 +53,10 @@
   <item android:title="@string/category_pipeline">
     <menu>
       <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_imagepipeline_media_variations"
+            android:title="@string/imagepipeline_media_variations_title"
+            />
         <item
             android:id="@+id/nav_imagepipeline_notification"
             android:title="@string/imagepipeline_notification_title"
@@ -50,8 +66,25 @@
             android:title="@string/imagepipeline_postprocessor_title"
             />
         <item
+            android:id="@+id/nav_imagepipeline_resizing"
+            android:title="@string/imagepipeline_resizing_title"
+            />
+        <item
             android:id="@+id/nav_imagepipeline_prefetch"
             android:title="@string/imagepipeline_prefetch_title"
+            />
+        <item
+            android:id="@+id/nav_imagepipeline_qualified_resource"
+            android:title="@string/imagepipeline_qualified_resource_title"
+            />
+        <item
+            android:id="@+id/nav_imagepipeline_partial_request"
+            android:title="@string/imagepipeline_partial_request_title"
+            android:visible="false"
+            />
+        <item
+            android:id="@+id/nav_imagepipeline_bitmap_factory"
+            android:title="@string/imagepipeline_bitmap_factory_title"
             />
       </group>
     </menu>
@@ -61,6 +94,10 @@
     <menu>
       <group android:checkableBehavior="single">
         <item
+            android:id="@+id/nav_format_pjpeg"
+            android:title="@string/format_pjpeg_title"
+            />
+        <item
             android:id="@+id/nav_format_color"
             android:title="@string/format_color_title"
             />
@@ -69,12 +106,24 @@
             android:title="@string/format_gif_title"
             />
         <item
+            android:id="@+id/nav_format_webp"
+            android:title="@string/format_webp_title"
+            />
+        <item
             android:id="@+id/nav_format_svg"
             android:title="@string/format_svg_title"
             />
         <item
             android:id="@+id/nav_format_keyframes"
             android:title="@string/format_keyframes_title"
+            />
+        <item
+            android:id="@+id/nav_format_override"
+            android:title="@string/format_override_title"
+            />
+        <item
+            android:id="@+id/nav_format_datauri"
+            android:title="@string/format_datauri_title"
             />
       </group>
     </menu>

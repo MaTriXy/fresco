@@ -9,13 +9,19 @@
 
 package com.facebook.imagepipeline.producers;
 
-import java.io.IOException;
-import java.lang.reflect.Array;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.request.ImageRequest;
-
+import java.io.IOException;
+import java.lang.reflect.Array;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,14 +31,6 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
-
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
-import static org.mockito.Mockito.when;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
@@ -70,7 +68,7 @@ public class ThumbnailBranchProducerTest {
   public void testNullReturnedIfNoResizeOptions() {
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(null, true);
+    verify(mImageConsumer).onNewResult(null, Consumer.IS_LAST);
     verifyZeroInteractions((Object[]) mThumbnailProducers);
   }
 
@@ -83,7 +81,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(firstImage, true);
+    verify(mImageConsumer).onNewResult(firstImage, Consumer.IS_LAST);
     verifyZeroInteractions(mThumbnailProducers[1], mThumbnailProducers[2]);
   }
 
@@ -98,7 +96,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(secondImage, true);
+    verify(mImageConsumer).onNewResult(secondImage, Consumer.IS_LAST);
     verifyZeroInteractions(mThumbnailProducers[2]);
   }
 
@@ -111,7 +109,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(thirdImage, true);
+    verify(mImageConsumer).onNewResult(thirdImage, Consumer.IS_LAST);
     verifyAllProducersRequestedForResults();
   }
 
@@ -123,7 +121,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(null, true);
+    verify(mImageConsumer).onNewResult(null, Consumer.IS_LAST);
     ResizeOptions resizeOptions = new ResizeOptions(width, height);
     verify(mThumbnailProducers[0]).canProvideImageForSize(resizeOptions);
     verify(mThumbnailProducers[1]).canProvideImageForSize(resizeOptions);
@@ -141,7 +139,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(null, true);
+    verify(mImageConsumer).onNewResult(null, Consumer.IS_LAST);
     verifyAllProducersRequestedForResults();
   }
 
@@ -173,7 +171,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(thirdImage, true);
+    verify(mImageConsumer).onNewResult(thirdImage, Consumer.IS_LAST);
     verifyAllProducersRequestedForResults();
   }
 
@@ -189,7 +187,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(secondImage, true);
+    verify(mImageConsumer).onNewResult(secondImage, Consumer.IS_LAST);
     verifyZeroInteractions(mThumbnailProducers[2]);
   }
 
@@ -204,7 +202,7 @@ public class ThumbnailBranchProducerTest {
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
-    verify(mImageConsumer).onNewResult(null, true);
+    verify(mImageConsumer).onNewResult(null, Consumer.IS_LAST);
     verify(mThumbnailProducers[2]).produceResults(any(Consumer.class), any(ProducerContext.class));
   }
 
@@ -243,7 +241,7 @@ public class ThumbnailBranchProducerTest {
           if (image == THROW_FAILURE) {
             consumer.onFailure(new IOException("IMAGE FAILED"));
           } else {
-            consumer.onNewResult(image, true);
+            consumer.onNewResult(image, Consumer.IS_LAST);
           }
         }
       });

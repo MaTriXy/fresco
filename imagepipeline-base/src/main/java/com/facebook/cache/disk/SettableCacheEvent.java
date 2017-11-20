@@ -9,13 +9,12 @@
 
 package com.facebook.cache.disk;
 
-import javax.annotation.Nullable;
-
-import java.io.IOException;
-
 import com.facebook.cache.common.CacheEvent;
 import com.facebook.cache.common.CacheEventListener;
 import com.facebook.cache.common.CacheKey;
+import com.facebook.infer.annotation.ReturnsOwnership;
+import java.io.IOException;
+import javax.annotation.Nullable;
 
 /**
  * Implementation of {@link CacheEvent} that allows the values to be set and supports recycling of
@@ -38,6 +37,7 @@ public class SettableCacheEvent implements CacheEvent {
   private CacheEventListener.EvictionReason mEvictionReason;
   private SettableCacheEvent mNextRecycledEvent;
 
+  @ReturnsOwnership
   public static SettableCacheEvent obtain() {
     synchronized (RECYCLER_LOCK) {
       if (sFirstRecycledEvent != null) {

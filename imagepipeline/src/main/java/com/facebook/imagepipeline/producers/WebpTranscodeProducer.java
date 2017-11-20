@@ -9,29 +9,21 @@
 
 package com.facebook.imagepipeline.producers;
 
-import javax.annotation.Nullable;
-
-import java.io.InputStream;
-import java.lang.annotation.Retention;
-import java.util.concurrent.Executor;
-
-import android.support.annotation.IntDef;
-
 import com.facebook.common.internal.Preconditions;
+import com.facebook.common.memory.PooledByteBuffer;
+import com.facebook.common.memory.PooledByteBufferFactory;
+import com.facebook.common.memory.PooledByteBufferOutputStream;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.util.TriState;
 import com.facebook.imageformat.DefaultImageFormats;
 import com.facebook.imageformat.ImageFormat;
 import com.facebook.imageformat.ImageFormatChecker;
 import com.facebook.imagepipeline.image.EncodedImage;
-import com.facebook.imagepipeline.memory.PooledByteBuffer;
-import com.facebook.imagepipeline.memory.PooledByteBufferFactory;
-import com.facebook.imagepipeline.memory.PooledByteBufferOutputStream;
-
-import com.facebook.imagepipeline.nativecode.WebpTranscoderFactory;
 import com.facebook.imagepipeline.nativecode.WebpTranscoder;
-
-import static java.lang.annotation.RetentionPolicy.SOURCE;
+import com.facebook.imagepipeline.nativecode.WebpTranscoderFactory;
+import java.io.InputStream;
+import java.util.concurrent.Executor;
+import javax.annotation.Nullable;
 
 /**
  * Transcodes WebP to JPEG / PNG.
@@ -77,7 +69,7 @@ public class WebpTranscodeProducer implements Producer<EncodedImage> {
     }
 
     @Override
-    protected void onNewResultImpl(@Nullable EncodedImage newResult, boolean isLast) {
+    protected void onNewResultImpl(@Nullable EncodedImage newResult, @Status int status) {
       // try to determine if the last result should be transformed
       if (mShouldTranscodeWhenFinished == TriState.UNSET && newResult != null) {
         mShouldTranscodeWhenFinished = shouldTranscode(newResult);
@@ -85,15 +77,15 @@ public class WebpTranscodeProducer implements Producer<EncodedImage> {
 
       // just propagate result if it shouldn't be transformed
       if (mShouldTranscodeWhenFinished == TriState.NO) {
-        getConsumer().onNewResult(newResult, isLast);
+        getConsumer().onNewResult(newResult, status);
         return;
       }
 
-      if (isLast) {
+      if (isLast(status)) {
         if (mShouldTranscodeWhenFinished == TriState.YES && newResult != null) {
           transcodeLastResult(newResult, getConsumer(), mContext);
         } else {
-          getConsumer().onNewResult(newResult, isLast);
+          getConsumer().onNewResult(newResult, status);
         }
       }
     }
