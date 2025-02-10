@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.request;
@@ -21,9 +19,7 @@ import org.junit.runner.*;
 import org.mockito.*;
 import org.robolectric.*;
 
-/**
- * Tests for {@link ForwardingRequestListener}
- */
+/** Tests for {@link ForwardingRequestListener} */
 @RunWith(RobolectricTestRunner.class)
 public class ForwardingRequestListenerTest {
   @Mock public ImageRequest mRequest;
@@ -48,8 +44,9 @@ public class ForwardingRequestListenerTest {
     when(mRequestListener1.requiresExtraMap(mRequestId)).thenReturn(false);
     when(mRequestListener2.requiresExtraMap(mRequestId)).thenReturn(false);
     when(mRequestListener3.requiresExtraMap(mRequestId)).thenReturn(false);
-    mListenerManager = new ForwardingRequestListener(
-        Sets.newHashSet(mRequestListener1, mRequestListener2, mRequestListener3));
+    mListenerManager =
+        new ForwardingRequestListener(
+            Sets.newHashSet(mRequestListener1, mRequestListener2, mRequestListener3));
   }
 
   @Test
@@ -87,12 +84,9 @@ public class ForwardingRequestListenerTest {
   @Test
   public void testOnProducerFinishWithSuccess() {
     mListenerManager.onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
-    verify(mRequestListener1)
-        .onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
-    verify(mRequestListener2)
-        .onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
-    verify(mRequestListener3)
-        .onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
+    verify(mRequestListener1).onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
+    verify(mRequestListener2).onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
+    verify(mRequestListener3).onProducerFinishWithSuccess(mRequestId, mProducerName, mImmutableMap);
   }
 
   @Test
@@ -121,18 +115,9 @@ public class ForwardingRequestListenerTest {
   @Test
   public void testOnProducerEvent() {
     mListenerManager.onProducerEvent(mRequestId, mProducerName, mProducerEventName);
-    verify(mRequestListener1).onProducerEvent(
-        mRequestId,
-        mProducerName,
-        mProducerEventName);
-    verify(mRequestListener2).onProducerEvent(
-        mRequestId,
-        mProducerName,
-        mProducerEventName);
-    verify(mRequestListener3).onProducerEvent(
-        mRequestId,
-        mProducerName,
-        mProducerEventName);
+    verify(mRequestListener1).onProducerEvent(mRequestId, mProducerName, mProducerEventName);
+    verify(mRequestListener2).onProducerEvent(mRequestId, mProducerName, mProducerEventName);
+    verify(mRequestListener3).onProducerEvent(mRequestId, mProducerName, mProducerEventName);
   }
 
   @Test

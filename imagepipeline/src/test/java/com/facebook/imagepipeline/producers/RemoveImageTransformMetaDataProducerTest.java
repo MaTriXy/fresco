@@ -1,22 +1,21 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
 
 import static org.junit.Assert.*;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.any;
 
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imagepipeline.image.EncodedImage;
+import javax.annotation.Nullable;
 import org.junit.*;
 import org.junit.runner.*;
 import org.mockito.*;
@@ -26,7 +25,7 @@ import org.robolectric.*;
 import org.robolectric.annotation.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest= Config.NONE)
+@Config(manifest = Config.NONE)
 public class RemoveImageTransformMetaDataProducerTest {
   @Mock public Producer mInputProducer;
   @Mock public Consumer<CloseableReference<PooledByteBuffer>> mConsumer;
@@ -35,7 +34,7 @@ public class RemoveImageTransformMetaDataProducerTest {
   @Mock public Exception mException;
 
   private RemoveImageTransformMetaDataProducer mRemoveMetaDataProducer;
-  private Consumer<EncodedImage> mRemoveMetaDataConsumer;
+  @Nullable private Consumer<EncodedImage> mRemoveMetaDataConsumer;
   private PooledByteBuffer mIntermediateByteBuffer;
   private PooledByteBuffer mFinalByteBuffer;
   private CloseableReference<PooledByteBuffer> mIntermediateResult;
@@ -54,13 +53,16 @@ public class RemoveImageTransformMetaDataProducerTest {
 
     mRemoveMetaDataConsumer = null;
     doAnswer(
-        new Answer() {
-          @Override
-          public Object answer(InvocationOnMock invocation) throws Throwable {
-            mRemoveMetaDataConsumer = (Consumer<EncodedImage>) invocation.getArguments()[0];
-            return null;
-          }
-        }).when(mInputProducer).produceResults(any(Consumer.class), any(ProducerContext.class));
+            new Answer() {
+              @Nullable
+              @Override
+              public Object answer(InvocationOnMock invocation) throws Throwable {
+                mRemoveMetaDataConsumer = (Consumer<EncodedImage>) invocation.getArguments()[0];
+                return null;
+              }
+            })
+        .when(mInputProducer)
+        .produceResults(any(Consumer.class), any(ProducerContext.class));
     mRemoveMetaDataProducer.produceResults(mConsumer, mProducerContext);
   }
 

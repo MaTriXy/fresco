@@ -1,18 +1,18 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.animated.base;
 
+import android.graphics.Bitmap;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
-/**
- * Common interface for an animated image.
- */
+/** Common interface for an animated image. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public interface AnimatedImage {
 
   int LOOP_COUNT_INFINITE = 0;
@@ -77,8 +77,8 @@ public interface AnimatedImage {
   AnimatedImageFrame getFrame(int frameNumber);
 
   /**
-   * Returns whether {@link AnimatedImageFrame#renderFrame} supports scaling to arbitrary
-   * sizes or whether scaling must be done externally.
+   * Returns whether {@link AnimatedImageFrame#renderFrame} supports scaling to arbitrary sizes or
+   * whether scaling must be done externally.
    *
    * @return whether rendering supports scaling
    */
@@ -99,4 +99,12 @@ public interface AnimatedImage {
    * @return the frame info
    */
   AnimatedDrawableFrameInfo getFrameInfo(int frameNumber);
+
+  /**
+   * Gets the Bitmap.Config to decode the Bitmap of Animated Frames.
+   *
+   * @return Bitmap.Config for Animated Image
+   */
+  @Nullable
+  Bitmap.Config getAnimatedBitmapConfig();
 }

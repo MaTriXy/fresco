@@ -1,17 +1,15 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #ifndef _STREAMS_H_
 #define _STREAMS_H_
 
-#include <vector>
 #include <stdint.h>
+#include <vector>
 
 #include <jni.h>
 
@@ -36,6 +34,7 @@ static const unsigned int kMaxAllowedImageSize = 8 * 1024 * 1024;
  */
 std::vector<uint8_t> readStreamFully(JNIEnv* env, jobject is);
 
-} }
+} // namespace imagepipeline
+} // namespace facebook
 
 #endif /* _STREAMS_H_ */

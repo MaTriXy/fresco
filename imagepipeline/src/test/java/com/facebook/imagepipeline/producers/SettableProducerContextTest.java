@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
@@ -13,6 +11,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import com.facebook.imagepipeline.common.Priority;
+import com.facebook.imagepipeline.core.ImagePipelineConfig;
 import com.facebook.imagepipeline.request.ImageRequest;
 import org.junit.*;
 import org.junit.runner.*;
@@ -20,29 +19,30 @@ import org.mockito.*;
 import org.robolectric.*;
 import org.robolectric.annotation.*;
 
-/**
- * Checks basic properties of NullProducer, that is that it always returns null.
- */
+/** Checks basic properties of NullProducer, that is that it always returns null. */
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest= Config.NONE)
+@Config(manifest = Config.NONE)
 public class SettableProducerContextTest {
   @Mock public ImageRequest mImageRequest;
   private final String mRequestId = "mRequestId";
   private ProducerContextCallbacks mCallbacks1;
   private ProducerContextCallbacks mCallbacks2;
   private SettableProducerContext mSettableProducerContext;
+  @Mock public ImagePipelineConfig mConfig;
 
   @Before
   public void setUp() {
-    mSettableProducerContext = new SettableProducerContext(
-        mImageRequest,
-        mRequestId,
-        mock(ProducerListener.class),
-        mock(Object.class),
-        ImageRequest.RequestLevel.FULL_FETCH,
-        false,
-        true,
-        Priority.MEDIUM);
+    mSettableProducerContext =
+        new SettableProducerContext(
+            mImageRequest,
+            mRequestId,
+            mock(ProducerListener2.class),
+            mock(Object.class),
+            ImageRequest.RequestLevel.FULL_FETCH,
+            false,
+            true,
+            Priority.MEDIUM,
+            mConfig);
     mCallbacks1 = mock(ProducerContextCallbacks.class);
     mCallbacks2 = mock(ProducerContextCallbacks.class);
   }

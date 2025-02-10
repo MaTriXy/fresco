@@ -1,16 +1,15 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.animated.webp;
 
 import static com.facebook.imagepipeline.nativecode.StaticWebpNativeLoader.ensure;
 
+import android.graphics.Bitmap;
 import com.facebook.common.internal.DoNotStrip;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo;
@@ -18,14 +17,17 @@ import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo.BlendO
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo.DisposalMethod;
 import com.facebook.imagepipeline.animated.base.AnimatedImage;
 import com.facebook.imagepipeline.animated.factory.AnimatedImageDecoder;
+import com.facebook.imagepipeline.common.ImageDecodeOptions;
+import com.facebook.infer.annotation.Nullsafe;
 import java.nio.ByteBuffer;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A representation of a WebP image. An instance of this class will hold a copy of the encoded
- * data in memory along with the parsed header data. Frames are decoded on demand via
- * {@link WebPFrame}.
+ * A representation of a WebP image. An instance of this class will hold a copy of the encoded data
+ * in memory along with the parsed header data. Frames are decoded on demand via {@link WebPFrame}.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 @DoNotStrip
 public class WebPImage implements AnimatedImage, AnimatedImageDecoder {
@@ -35,9 +37,10 @@ public class WebPImage implements AnimatedImage, AnimatedImageDecoder {
   @DoNotStrip
   private long mNativeContext;
 
+  @Nullable private Bitmap.Config mDecodeBitmapConfig = null;
+
   @DoNotStrip
-  public WebPImage() {
-  }
+  public WebPImage() {}
 
   /**
    * Constructs the image with the native pointer. This is called by native code.
@@ -60,12 +63,12 @@ public class WebPImage implements AnimatedImage, AnimatedImageDecoder {
   }
 
   /**
-   * Creates a {@link WebPImage} from the specified encoded data. This will throw if it fails
-   * to create. This is meant to be called on a worker thread.
+   * Creates a {@link WebPImage} from the specified encoded data. This will throw if it fails to
+   * create. This is meant to be called on a worker thread.
    *
    * @param source the data to the image (a copy will be made)
    */
-  public static WebPImage create(byte[] source) {
+  public static WebPImage createFromByteArray(byte[] source, @Nullable ImageDecodeOptions options) {
     ensure();
     Preconditions.checkNotNull(source);
 
@@ -73,18 +76,51 @@ public class WebPImage implements AnimatedImage, AnimatedImageDecoder {
     byteBuffer.put(source);
     byteBuffer.rewind();
 
-    return nativeCreateFromDirectByteBuffer(byteBuffer);
+    WebPImage image = nativeCreateFromDirectByteBuffer(byteBuffer);
+    if (options != null) {
+      image.mDecodeBitmapConfig = options.animatedBitmapConfig;
+    }
+    return image;
   }
 
-  public static WebPImage create(long nativePtr, int sizeInBytes) {
+  /**
+   * Creates a {@link WebPImage} from a ByteBuffer containing the image. This will throw if it fails
+   * to create.
+   *
+   * @param byteBuffer the ByteBuffer containing the image
+   */
+  public static WebPImage createFromByteBuffer(
+      ByteBuffer byteBuffer, @Nullable ImageDecodeOptions options) {
+    ensure();
+    byteBuffer.rewind();
+
+    WebPImage image = nativeCreateFromDirectByteBuffer(byteBuffer);
+    if (options != null) {
+      image.mDecodeBitmapConfig = options.animatedBitmapConfig;
+    }
+    return image;
+  }
+
+  public static WebPImage createFromNativeMemory(
+      long nativePtr, int sizeInBytes, @Nullable ImageDecodeOptions options) {
     ensure();
     Preconditions.checkArgument(nativePtr != 0);
-    return nativeCreateFromNativeMemory(nativePtr, sizeInBytes);
+    WebPImage image = nativeCreateFromNativeMemory(nativePtr, sizeInBytes);
+    if (options != null) {
+      image.mDecodeBitmapConfig = options.animatedBitmapConfig;
+    }
+    return image;
   }
 
   @Override
-  public AnimatedImage decode(long nativePtr, int sizeInBytes) {
-    return WebPImage.create(nativePtr, sizeInBytes);
+  public AnimatedImage decodeFromNativeMemory(
+      long nativePtr, int sizeInBytes, ImageDecodeOptions options) {
+    return WebPImage.createFromNativeMemory(nativePtr, sizeInBytes, options);
+  }
+
+  @Override
+  public AnimatedImage decodeFromByteBuffer(ByteBuffer byteBuffer, ImageDecodeOptions options) {
+    return WebPImage.createFromByteBuffer(byteBuffer, options);
   }
 
   @Override
@@ -142,27 +178,44 @@ public class WebPImage implements AnimatedImage, AnimatedImageDecoder {
           frame.getYOffset(),
           frame.getWidth(),
           frame.getHeight(),
-          frame.isBlendWithPreviousFrame() ?
-              BlendOperation.BLEND_WITH_PREVIOUS :
-              BlendOperation.NO_BLEND,
-          frame.shouldDisposeToBackgroundColor() ?
-              DisposalMethod.DISPOSE_TO_BACKGROUND :
-              DisposalMethod.DISPOSE_DO_NOT);
+          frame.isBlendWithPreviousFrame()
+              ? BlendOperation.BLEND_WITH_PREVIOUS
+              : BlendOperation.NO_BLEND,
+          frame.shouldDisposeToBackgroundColor()
+              ? DisposalMethod.DISPOSE_TO_BACKGROUND
+              : DisposalMethod.DISPOSE_DO_NOT);
     } finally {
       frame.dispose();
     }
   }
 
+  @Override
+  @Nullable
+  public Bitmap.Config getAnimatedBitmapConfig() {
+    return mDecodeBitmapConfig;
+  }
+
   private static native WebPImage nativeCreateFromDirectByteBuffer(ByteBuffer buffer);
+
   private static native WebPImage nativeCreateFromNativeMemory(long nativePtr, int sizeInBytes);
+
   private native int nativeGetWidth();
+
   private native int nativeGetHeight();
+
   private native int nativeGetDuration();
+
   private native int nativeGetFrameCount();
+
   private native int[] nativeGetFrameDurations();
+
   private native int nativeGetLoopCount();
+
   private native WebPFrame nativeGetFrame(int frameNumber);
+
   private native int nativeGetSizeInBytes();
+
   private native void nativeDispose();
+
   private native void nativeFinalize();
 }

@@ -1,15 +1,13 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 import org.junit.*;
@@ -31,47 +29,42 @@ public class BaseConsumerTest {
     mResult = new Object();
     mResult2 = new Object();
     mException = new RuntimeException();
-    mBaseConsumer = new BaseConsumer() {
-      @Override
-      protected void onNewResultImpl(Object newResult, @Status int status) {
-        mDelegatedConsumer.onNewResult(newResult, status);
-      }
+    mBaseConsumer =
+        new BaseConsumer() {
+          @Override
+          protected void onNewResultImpl(Object newResult, @Status int status) {
+            mDelegatedConsumer.onNewResult(newResult, status);
+          }
 
-      @Override
-      protected void onFailureImpl(Throwable t) {
-        mDelegatedConsumer.onFailure(t);
-      }
+          @Override
+          protected void onFailureImpl(Throwable t) {
+            mDelegatedConsumer.onFailure(t);
+          }
 
-      @Override
-      protected void onCancellationImpl() {
-        mDelegatedConsumer.onCancellation();
-      }
-    };
+          @Override
+          protected void onCancellationImpl() {
+            mDelegatedConsumer.onCancellation();
+          }
+        };
   }
 
   @Test
   public void testOnNewResultDoesNotThrow() {
-    doThrow(new RuntimeException())
-        .when(mDelegatedConsumer)
-        .onNewResult(anyObject(), anyInt());
+    doThrow(new RuntimeException()).when(mDelegatedConsumer).onNewResult(anyObject(), anyInt());
     mBaseConsumer.onNewResult(mResult, 0);
     verify(mDelegatedConsumer).onNewResult(mResult, 0);
   }
 
   @Test
   public void testOnFailureDoesNotThrow() {
-    doThrow(new RuntimeException())
-        .when(mDelegatedConsumer)
-        .onFailure(any(Throwable.class));
+    doThrow(new RuntimeException()).when(mDelegatedConsumer).onFailure(any(Throwable.class));
     mBaseConsumer.onFailure(mException);
     verify(mDelegatedConsumer).onFailure(mException);
   }
 
   @Test
   public void testOnCancellationDoesNotThrow() {
-    doThrow(new RuntimeException())
-        .when(mDelegatedConsumer)
-        .onCancellation();
+    doThrow(new RuntimeException()).when(mDelegatedConsumer).onCancellation();
     mBaseConsumer.onCancellation();
     verify(mDelegatedConsumer).onCancellation();
   }
@@ -136,27 +129,29 @@ public class BaseConsumerTest {
 
   @Test
   public void testStatusHasFlag() {
-    assertThat(BaseConsumer
-        .statusHasFlag(Consumer.IS_PLACEHOLDER | Consumer.IS_LAST, Consumer.IS_PLACEHOLDER))
+    assertThat(
+            BaseConsumer.statusHasFlag(
+                Consumer.IS_PLACEHOLDER | Consumer.IS_LAST, Consumer.IS_PLACEHOLDER))
         .isTrue();
 
-    assertThat(BaseConsumer
-        .statusHasFlag(Consumer.DO_NOT_CACHE_ENCODED | Consumer.IS_LAST, Consumer.IS_PLACEHOLDER))
+    assertThat(
+            BaseConsumer.statusHasFlag(
+                Consumer.DO_NOT_CACHE_ENCODED | Consumer.IS_LAST, Consumer.IS_PLACEHOLDER))
         .isFalse();
   }
 
   @Test
   public void testStatusHasAnyFlag() {
-    assertThat(BaseConsumer
-        .statusHasAnyFlag(
-            Consumer.IS_PLACEHOLDER | Consumer.IS_LAST,
-            Consumer.IS_PLACEHOLDER | Consumer.DO_NOT_CACHE_ENCODED))
+    assertThat(
+            BaseConsumer.statusHasAnyFlag(
+                Consumer.IS_PLACEHOLDER | Consumer.IS_LAST,
+                Consumer.IS_PLACEHOLDER | Consumer.DO_NOT_CACHE_ENCODED))
         .isTrue();
 
-    assertThat(BaseConsumer
-        .statusHasAnyFlag(
-            Consumer.IS_PLACEHOLDER | Consumer.IS_LAST,
-            Consumer.IS_PARTIAL_RESULT | Consumer.DO_NOT_CACHE_ENCODED))
+    assertThat(
+            BaseConsumer.statusHasAnyFlag(
+                Consumer.IS_PLACEHOLDER | Consumer.IS_LAST,
+                Consumer.IS_PARTIAL_RESULT | Consumer.DO_NOT_CACHE_ENCODED))
         .isFalse();
   }
 }

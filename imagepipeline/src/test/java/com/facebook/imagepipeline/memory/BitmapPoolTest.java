@@ -1,70 +1,71 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.memory;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
-import com.facebook.common.soloader.SoLoaderShim;
 import com.facebook.imagepipeline.testing.MockBitmapFactory;
 import com.facebook.imageutils.BitmapUtil;
-import org.junit.*;
-import org.junit.runner.*;
-import org.mockito.*;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
-import org.mockito.invocation.*;
-import org.mockito.stubbing.*;
-import org.powermock.core.classloader.annotations.*;
-import org.robolectric.*;
+import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
+import org.robolectric.RobolectricTestRunner;
 
-/**
- Basic tests for BitmapPool */
+/** Basic tests for BitmapPool */
 @RunWith(RobolectricTestRunner.class)
-@PowerMockIgnore({"org.mockito.*", "org.robolectric.*", "android.*"})
+@PowerMockIgnore({"org.mockito.*", "org.robolectric.*", "androidx.*", "android.*"})
 @org.robolectric.annotation.Config(manifest = org.robolectric.annotation.Config.NONE)
 public class BitmapPoolTest {
 
-  static {
-    SoLoaderShim.setInTestMode();
-  }
-
   @Mock(answer = Answers.CALLS_REAL_METHODS)
-  public BitmapPool mPool;
+  public BucketsBitmapPool mPool;
 
   @Before
   public void setup() {
     MockitoAnnotations.initMocks(this);
     doAnswer(
-        new Answer() {
-          @Override
-          public Object answer(InvocationOnMock invocation) throws Throwable {
-            int size=(Integer) invocation.getArguments()[0];
-            return MockBitmapFactory.create(
-                1,
-                (int) Math.ceil(size / (double) BitmapUtil.RGB_565_BYTES_PER_PIXEL),
-                Bitmap.Config.RGB_565);
-          }
-        }).when(mPool).alloc(any(Integer.class));
+            new Answer() {
+              @Override
+              public Object answer(InvocationOnMock invocation) throws Throwable {
+                int size = (Integer) invocation.getArguments()[0];
+                return MockBitmapFactory.create(
+                    1,
+                    (int) Math.ceil(size / (double) BitmapUtil.RGB_565_BYTES_PER_PIXEL),
+                    Bitmap.Config.RGB_565);
+              }
+            })
+        .when(mPool)
+        .alloc(any(Integer.class));
     doAnswer(
-        new Answer() {
-          @Override
-          public Object answer(InvocationOnMock invocation) throws Throwable {
-            final Bitmap bitmap = (Bitmap) invocation.getArguments()[0];
-            return BitmapUtil.getSizeInByteForBitmap(
-                bitmap.getWidth(),
-                bitmap.getHeight(),
-                bitmap.getConfig());
-          }
-        }).when(mPool).getBucketedSizeForValue(any(Bitmap.class));
+            new Answer() {
+              @Override
+              public Object answer(InvocationOnMock invocation) throws Throwable {
+                final Bitmap bitmap = (Bitmap) invocation.getArguments()[0];
+                return BitmapUtil.getSizeInByteForBitmap(
+                    bitmap.getWidth(), bitmap.getHeight(), bitmap.getConfig());
+              }
+            })
+        .when(mPool)
+        .getBucketedSizeForValue(any(Bitmap.class));
   }
 
   @Test

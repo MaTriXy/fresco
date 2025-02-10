@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
@@ -12,6 +10,8 @@ package com.facebook.imagepipeline.producers;
 import android.net.Uri;
 import com.facebook.imagepipeline.common.BytesRange;
 import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.infer.annotation.Nullsafe;
+import com.facebook.infer.annotation.OkToExtend;
 import javax.annotation.Nullable;
 
 /**
@@ -19,6 +19,8 @@ import javax.annotation.Nullable;
  *
  * <p>Implementations can subclass this to store additional fetch-scoped fields.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
+@OkToExtend
 public class FetchState {
 
   private final Consumer<EncodedImage> mConsumer;
@@ -27,9 +29,7 @@ public class FetchState {
   private int mOnNewResultStatusFlags;
   private @Nullable BytesRange mResponseBytesRange;
 
-  public FetchState(
-      Consumer<EncodedImage> consumer,
-      ProducerContext context) {
+  public FetchState(Consumer<EncodedImage> consumer, ProducerContext context) {
     mConsumer = consumer;
     mContext = context;
     mLastIntermediateResultTimeMs = 0;
@@ -47,8 +47,8 @@ public class FetchState {
     return mContext.getId();
   }
 
-  public ProducerListener getListener() {
-    return mContext.getListener();
+  public ProducerListener2 getListener() {
+    return mContext.getProducerListener();
   }
 
   public Uri getUri() {
@@ -60,19 +60,20 @@ public class FetchState {
   }
 
   public void setLastIntermediateResultTimeMs(long lastIntermediateResultTimeMs) {
-    mLastIntermediateResultTimeMs = lastIntermediateResultTimeMs;
+    this.mLastIntermediateResultTimeMs = lastIntermediateResultTimeMs;
   }
 
-  @Consumer.Status public int getOnNewResultStatusFlags() {
+  @Consumer.Status
+  public int getOnNewResultStatusFlags() {
     return mOnNewResultStatusFlags;
   }
 
   /**
-   * EXPERIMENTAL: Allows the fetcher to set extra status flags to be included in calls to
-   * {@link Consumer#onNewResult(Object, int)}.
+   * EXPERIMENTAL: Allows the fetcher to set extra status flags to be included in calls to {@link
+   * Consumer#onNewResult(Object, int)}.
    */
   public void setOnNewResultStatusFlags(@Consumer.Status int onNewResultStatusFlags) {
-    mOnNewResultStatusFlags = onNewResultStatusFlags;
+    this.mOnNewResultStatusFlags = onNewResultStatusFlags;
   }
 
   @Nullable
@@ -84,7 +85,7 @@ public class FetchState {
    * EXPERIMENTAL: Allows the fetcher to identify that the reponse is for an imcomplete portion of
    * the whole image by defining the range of bytes being provided.
    */
-  public void setResponseBytesRange(BytesRange bytesRange) {
+  public void setResponseBytesRange(@Nullable BytesRange bytesRange) {
     mResponseBytesRange = bytesRange;
   }
 }

@@ -1,20 +1,19 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.samples.scrollperf.data;
 
+import com.facebook.infer.annotation.Nullsafe;
+
 /**
- * This is a simple version of an Adapter which just provides the number of element and
- * the element itself based on an index
+ * This is a simple version of an Adapter which just provides the number of element and the element
+ * itself based on an index
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public interface SimpleAdapter<E> {
 
   int getSize();
@@ -23,30 +22,31 @@ public interface SimpleAdapter<E> {
 
   boolean isLazy();
 
-  /**
-   * Utility class for SimpleAdapter
-   */
+  /** Utility class for SimpleAdapter */
   class Util {
 
-    public static SimpleAdapter EMPTY_ADAPTER = new SimpleAdapter() {
-      @Override
-      public int getSize() {
-        return 0;
-      }
+    public static SimpleAdapter EMPTY_ADAPTER =
+        new SimpleAdapter() {
+          @Override
+          public int getSize() {
+            return 0;
+          }
 
-      @Override
-      public Object get(int position) {
-        return null;
-      }
+          @Override
+          public Object get(int position) {
+            // NULLSAFE_FIXME[Return Not Nullable]
+            return null;
+          }
 
-      @Override
-      public boolean isLazy() {
-        return false;
-      }
-    };
+          @Override
+          public boolean isLazy() {
+            return false;
+          }
+        };
 
     /**
      * This creates an infinite version of the given SimpleAdapter setting
+     *
      * @param srcAdapter The source SimpleAdapter
      * @param <E> The parameter type for this SimpleAdapter
      * @return The infinite version of this SimpleAdapter
@@ -58,7 +58,7 @@ public interface SimpleAdapter<E> {
       return new SimpleAdapter<E>() {
         @Override
         public int getSize() {
-          return (srcAdapter.getSize() == 0) ? 0 :Integer.MAX_VALUE;
+          return (srcAdapter.getSize() == 0) ? 0 : Integer.MAX_VALUE;
         }
 
         @Override
@@ -75,13 +75,13 @@ public interface SimpleAdapter<E> {
 
     /**
      * This creates an infinite version of the given SimpleAdapter setting
+     *
      * @param adaptee The source SimpleAdapter to decorate
      * @param <E> The parameter type for this SimpleAdapter
      * @return The infinite version of this SimpleAdapter
      */
     public static <E> SimpleAdapter<E> decorate(
-        final SimpleAdapter<E> adaptee,
-        final Decorator<E> decorator) {
+        final SimpleAdapter<E> adaptee, final Decorator<E> decorator) {
 
       return new SimpleAdapter<E>() {
         @Override

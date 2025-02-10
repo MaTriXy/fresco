@@ -1,15 +1,13 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.widget.text.span;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -25,8 +23,8 @@ import org.robolectric.ParameterizedRobolectricTestRunner;
 
 /**
  * Tests the dimensions assigned by {@link BetterImageSpan} ensuring the width/height of is
- * calculated correctly for different combinations of image and text height,
- * as well as span alignment.
+ * calculated correctly for different combinations of image and text height, as well as span
+ * alignment.
  */
 @RunWith(ParameterizedRobolectricTestRunner.class)
 public class BetterImageSpanTest {

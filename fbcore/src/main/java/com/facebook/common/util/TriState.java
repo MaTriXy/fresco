@@ -1,37 +1,39 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.util;
 
 import com.facebook.infer.annotation.Functional;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
-/**
- * Generic tri-state enum for boolean values that can also be unset.
- */
+/** Generic tri-state enum for boolean values that can also be unset. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public enum TriState {
   YES,
   NO,
   UNSET,
   ;
 
-  /** @return whether this value is set; that is, whether it is YES or NO. */
+  /**
+   * @return whether this value is set; that is, whether it is YES or NO.
+   */
   @Functional
   public boolean isSet() {
     return this != UNSET;
   }
 
   /**
-   * Returns the value of the {@link TriState} enum that corresponds to the specified
-   * {@code boolean}.
-   * <p>
-   * This method deliberately declares {@code boolean} as its param type rather than {@link Boolean}
-   * because:
+   * Returns the value of the {@link TriState} enum that corresponds to the specified {@code
+   * boolean}.
+   *
+   * <p>This method deliberately declares {@code boolean} as its param type rather than {@link
+   * Boolean} because:
+   *
    * <ol>
    *   <li>Declaring {@link Boolean} would likely result in a bunch of unnecessary autoboxing.
    *   <li>Anyone who finds himself using a {@link Boolean} instead of a {@code boolean} for its
@@ -44,15 +46,15 @@ public enum TriState {
   }
 
   @Functional
-  public static TriState valueOf(Boolean bool) {
+  public static TriState valueOf(@Nullable Boolean bool) {
     return bool != null ? valueOf(bool.booleanValue()) : TriState.UNSET;
   }
 
   /**
    * Returns the {@code boolean} value that corresponds to this {@link TriState}, if appropriate.
    *
-   * @return {@code true} if {@code this} is {@link TriState#YES} or
-   *     {@code false} if {@code this} is {@link TriState#NO}
+   * @return {@code true} if {@code this} is {@link TriState#YES} or {@code false} if {@code this}
+   *     is {@link TriState#NO}
    * @throws IllegalStateException if {@code this} is {@link TriState#UNSET}.
    */
   @Functional
@@ -73,9 +75,8 @@ public enum TriState {
    * Returns the {@code boolean} value that corresponds to this {@link TriState}, if appropriate.
    *
    * @param defaultValue default value to use if not set
-   * @return {@code true} if {@code this} is {@link TriState#YES} or
-   *     {@code false} if {@code this} is {@link TriState#NO} or {@code defaultValue} if
-   *     {@code this} is {@link TriState#UNSET}.
+   * @return {@code true} if {@code this} is {@link TriState#YES} or {@code false} if {@code this}
+   *     is {@link TriState#NO} or {@code defaultValue} if {@code this} is {@link TriState#UNSET}.
    */
   @Functional
   public boolean asBoolean(boolean defaultValue) {
@@ -94,12 +95,12 @@ public enum TriState {
   /**
    * Returns the {@code Boolean} value that corresponds to this {@link TriState}, if appropriate.
    *
-   * @return {@link Boolean#TRUE} if {@code this} is {@link TriState#YES} or
-   *     {@link Boolean#FALSE} if {@code this} is {@link TriState#NO} or {@code null} if
-   *     {@code this} is {@link TriState#UNSET}.
+   * @return {@link Boolean#TRUE} if {@code this} is {@link TriState#YES} or {@link Boolean#FALSE}
+   *     if {@code this} is {@link TriState#NO} or {@code null} if {@code this} is {@link
+   *     TriState#UNSET}.
    */
   @Functional
-  public Boolean asBooleanObject() {
+  public @Nullable Boolean asBooleanObject() {
     switch (this) {
       case YES:
         return Boolean.TRUE;

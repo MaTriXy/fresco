@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
@@ -15,6 +13,7 @@ import android.graphics.Rect;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.provider.MediaStore;
+import com.facebook.common.internal.Preconditions;
 import com.facebook.common.logging.FLog;
 import com.facebook.common.memory.PooledByteBufferFactory;
 import com.facebook.common.util.UriUtil;
@@ -22,15 +21,15 @@ import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imageutils.JfifUtil;
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
-/**
- * Represents a local content Uri fetch producer.
- */
+/** Represents a local content Uri fetch producer. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class LocalContentUriThumbnailFetchProducer extends LocalFetchProducer
     implements ThumbnailProducer<EncodedImage> {
 
@@ -38,13 +37,10 @@ public class LocalContentUriThumbnailFetchProducer extends LocalFetchProducer
 
   public static final String PRODUCER_NAME = "LocalContentUriThumbnailFetchProducer";
 
-  private static final String[] PROJECTION = new String[] {
-      MediaStore.Images.Media._ID,
-      MediaStore.Images.ImageColumns.DATA
-  };
-  private static final String[] THUMBNAIL_PROJECTION = new String[] {
-      MediaStore.Images.Thumbnails.DATA
-  };
+  private static final String[] PROJECTION =
+      new String[] {MediaStore.Images.Media._ID, MediaStore.Images.ImageColumns.DATA};
+  private static final String[] THUMBNAIL_PROJECTION =
+      new String[] {MediaStore.Images.Thumbnails.DATA};
 
   private static final Rect MINI_THUMBNAIL_DIMENSIONS = new Rect(0, 0, 512, 384);
   private static final Rect MICRO_THUMBNAIL_DIMENSIONS = new Rect(0, 0, 96, 96);
@@ -62,46 +58,43 @@ public class LocalContentUriThumbnailFetchProducer extends LocalFetchProducer
   }
 
   @Override
-  public boolean canProvideImageForSize(ResizeOptions resizeOptions) {
+  public boolean canProvideImageForSize(@Nullable ResizeOptions resizeOptions) {
     return ThumbnailSizeChecker.isImageBigEnough(
-        MINI_THUMBNAIL_DIMENSIONS.width(),
-        MINI_THUMBNAIL_DIMENSIONS.height(),
-        resizeOptions);
+        MINI_THUMBNAIL_DIMENSIONS.width(), MINI_THUMBNAIL_DIMENSIONS.height(), resizeOptions);
   }
 
   @Override
-  protected EncodedImage getEncodedImage(ImageRequest imageRequest) throws IOException {
+  protected @Nullable EncodedImage getEncodedImage(ImageRequest imageRequest) throws IOException {
     Uri uri = imageRequest.getSourceUri();
 
     if (UriUtil.isLocalCameraUri(uri)) {
-      EncodedImage cameraImage = getCameraImage(uri, imageRequest.getResizeOptions());
-      if (cameraImage != null) {
-        return cameraImage;
-      }
+      return getCameraImage(uri, imageRequest.getResizeOptions());
     }
 
     return null;
   }
 
-  private @Nullable EncodedImage getCameraImage(
-      Uri uri,
-      ResizeOptions resizeOptions) throws IOException {
-    Cursor cursor = mContentResolver.query(uri, PROJECTION, null, null, null);
+  private @Nullable EncodedImage getCameraImage(Uri uri, @Nullable ResizeOptions resizeOptions)
+      throws IOException {
+    if (resizeOptions == null) {
+      return null;
+    }
+    @Nullable Cursor cursor = mContentResolver.query(uri, PROJECTION, null, null, null);
     if (cursor == null) {
       return null;
     }
     try {
-      if (cursor.getCount() == 0) {
-        return null;
-      }
-      cursor.moveToFirst();
-      final String pathname =
-          cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATA));
-      if (resizeOptions != null) {
-        int imageIdColumnIndex = cursor.getColumnIndex(MediaStore.Images.Media._ID);
-        EncodedImage thumbnail = getThumbnail(resizeOptions, cursor.getInt(imageIdColumnIndex));
+      if (cursor.moveToFirst()) {
+        final int imageIdColumnIndex = cursor.getColumnIndex(MediaStore.Images.Media._ID);
+        final EncodedImage thumbnail =
+            this.getThumbnail(resizeOptions, cursor.getLong(imageIdColumnIndex));
         if (thumbnail != null) {
-          thumbnail.setRotationAngle(getRotationAngle(pathname));
+          final int imageDataColumnIndex =
+              cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATA);
+          if (imageDataColumnIndex >= 0) {
+            final String pathname = cursor.getString(imageDataColumnIndex);
+            thumbnail.setRotationAngle(getRotationAngle(pathname));
+          }
           return thumbnail;
         }
       }
@@ -114,33 +107,33 @@ public class LocalContentUriThumbnailFetchProducer extends LocalFetchProducer
   // Gets the smallest possible thumbnail that is bigger than the requested size in the resize
   // options or null if either the thumbnails are smaller than the requested size or there are no
   // stored thumbnails.
-  private EncodedImage getThumbnail(ResizeOptions resizeOptions, int imageId) throws IOException {
+  private @Nullable EncodedImage getThumbnail(ResizeOptions resizeOptions, long imageId)
+      throws IOException {
     int thumbnailKind = getThumbnailKind(resizeOptions);
     if (thumbnailKind == NO_THUMBNAIL) {
       return null;
     }
-    Cursor thumbnailCursor = null;
+    @Nullable
+    Cursor thumbnailCursor =
+        MediaStore.Images.Thumbnails.queryMiniThumbnail(
+            mContentResolver, imageId, thumbnailKind, THUMBNAIL_PROJECTION);
+    if (thumbnailCursor == null) {
+      return null;
+    }
     try {
-      thumbnailCursor = MediaStore.Images.Thumbnails.queryMiniThumbnail(
-          mContentResolver,
-          imageId,
-          thumbnailKind,
-          THUMBNAIL_PROJECTION);
-      if (thumbnailCursor == null) {
-         return null;
-      }
-      thumbnailCursor.moveToFirst();
-      if (thumbnailCursor.getCount() > 0) {
-        final String thumbnailUri = thumbnailCursor.getString(
-            thumbnailCursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA));
-        if (new File(thumbnailUri).exists()) {
-          return getEncodedImage(new FileInputStream(thumbnailUri), getLength(thumbnailUri));
+      if (thumbnailCursor.moveToFirst()) {
+        final int thumbnailDataColumnIndex =
+            thumbnailCursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA);
+        if (thumbnailDataColumnIndex >= 0) {
+          final String thumbnailUri =
+              Preconditions.checkNotNull(thumbnailCursor.getString(thumbnailDataColumnIndex));
+          if (new File(thumbnailUri).exists()) {
+            return getEncodedImage(new FileInputStream(thumbnailUri), getLength(thumbnailUri));
+          }
         }
       }
     } finally {
-      if (thumbnailCursor != null) {
-        thumbnailCursor.close();
-      }
+      thumbnailCursor.close();
     }
     return null;
   }
@@ -151,14 +144,10 @@ public class LocalContentUriThumbnailFetchProducer extends LocalFetchProducer
   // when scaling it to fit a view will not be significant.
   private static int getThumbnailKind(ResizeOptions resizeOptions) {
     if (ThumbnailSizeChecker.isImageBigEnough(
-        MICRO_THUMBNAIL_DIMENSIONS.width(),
-        MICRO_THUMBNAIL_DIMENSIONS.height(),
-        resizeOptions)) {
+        MICRO_THUMBNAIL_DIMENSIONS.width(), MICRO_THUMBNAIL_DIMENSIONS.height(), resizeOptions)) {
       return MediaStore.Images.Thumbnails.MICRO_KIND;
     } else if (ThumbnailSizeChecker.isImageBigEnough(
-        MINI_THUMBNAIL_DIMENSIONS.width(),
-        MINI_THUMBNAIL_DIMENSIONS.height(),
-        resizeOptions)) {
+        MINI_THUMBNAIL_DIMENSIONS.width(), MINI_THUMBNAIL_DIMENSIONS.height(), resizeOptions)) {
       return MediaStore.Images.Thumbnails.MINI_KIND;
     } else {
       return NO_THUMBNAIL;
@@ -174,12 +163,12 @@ public class LocalContentUriThumbnailFetchProducer extends LocalFetchProducer
     return PRODUCER_NAME;
   }
 
-  private static int getRotationAngle(String pathname) {
+  private static int getRotationAngle(@Nullable String pathname) {
     if (pathname != null) {
       try {
         ExifInterface exif = new ExifInterface(pathname);
-        return JfifUtil.getAutoRotateAngleFromOrientation(exif.getAttributeInt(
-            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
+        return JfifUtil.getAutoRotateAngleFromOrientation(
+            exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
       } catch (IOException ioe) {
         FLog.e(TAG, ioe, "Unable to retrieve thumbnail rotation for %s", pathname);
       }

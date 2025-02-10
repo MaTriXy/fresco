@@ -14,8 +14,8 @@
 
     <!-- static webp -->
 
-    <com.facebook.drawee.view.SimpleDraweeView
-        android:id="@+id/drawee_view_webp_static"
+    <ImageView
+        android:id="@+id/image_view_webp_static"
         android:layout_width="@dimen/drawee_width_medium"
         android:layout_height="@dimen/drawee_height_medium"
         android:layout_marginTop="@dimen/margin_medium"
@@ -31,14 +31,14 @@
 
     <!-- translucent webp -->
 
-    <com.facebook.drawee.view.SimpleDraweeView
-        android:id="@+id/drawee_view_webp_translucent"
+    <ImageView
+        android:id="@+id/image_view_webp_translucent"
         android:layout_width="@dimen/drawee_width_medium"
         android:layout_height="@dimen/drawee_height_medium"
         android:layout_marginTop="@dimen/margin_medium"
         />
 
-    <android.support.v7.widget.SwitchCompat
+    <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/switch_background"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -56,8 +56,8 @@
 
     <!-- animated webp -->
 
-    <com.facebook.drawee.view.SimpleDraweeView
-        android:id="@+id/drawee_view_webp_animated"
+    <ImageView
+        android:id="@+id/image_view_webp_animated"
         android:layout_width="@dimen/drawee_width_medium"
         android:layout_height="@dimen/drawee_height_medium"
         android:layout_marginTop="@dimen/margin_medium"

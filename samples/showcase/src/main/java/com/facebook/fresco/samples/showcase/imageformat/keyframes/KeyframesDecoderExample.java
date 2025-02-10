@@ -1,26 +1,25 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.imageformat.keyframes;
 
 import android.graphics.drawable.Drawable;
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 import com.facebook.common.internal.Closeables;
 import com.facebook.imageformat.ImageFormat;
 import com.facebook.imageformat.ImageFormatCheckerUtils;
 import com.facebook.imagepipeline.common.ImageDecodeOptions;
 import com.facebook.imagepipeline.decoder.ImageDecoder;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
+import com.facebook.imagepipeline.image.BaseCloseableImage;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.imagepipeline.image.ImageInfo;
+import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
 import com.facebook.keyframes.KeyframesDrawableBuilder;
 import com.facebook.keyframes.deserializers.KFImageDeserializer;
@@ -28,13 +27,11 @@ import com.facebook.keyframes.model.KFImage;
 import java.io.IOException;
 import java.io.InputStream;
 
-/**
- * Decoder and related classes for loading and displaying Keyframe animated images.
- */
+/** Decoder and related classes for loading and displaying Keyframe animated images. */
 public class KeyframesDecoderExample {
 
-  public static final ImageFormat IMAGE_FORMAT_KEYFRAMES
-      = new ImageFormat("KEYFRAMES", "keyframes");
+  public static final ImageFormat IMAGE_FORMAT_KEYFRAMES =
+      new ImageFormat("KEYFRAMES", "keyframes");
 
   public static ImageFormat.FormatChecker createFormatChecker() {
     return new KeyframesFormatChecker();
@@ -51,8 +48,7 @@ public class KeyframesDecoderExample {
   private static class KeyframesFormatChecker implements ImageFormat.FormatChecker {
 
     private static final int HEADER_SIZE = 100;
-    private static final byte[] JSON_OBJECT_FIRST_BYTE =
-        ImageFormatCheckerUtils.asciiBytes("{");
+    private static final byte[] JSON_OBJECT_FIRST_BYTE = ImageFormatCheckerUtils.asciiBytes("{");
 
     @Override
     public int getHeaderSize() {
@@ -67,9 +63,7 @@ public class KeyframesDecoderExample {
     @Override
     public ImageFormat determineFormat(byte[] headerBytes, int headerSize) {
       // JSON files must start with a opening curly brace
-      if (!ImageFormatCheckerUtils.startsWithPattern(
-          headerBytes,
-          JSON_OBJECT_FIRST_BYTE)) {
+      if (!ImageFormatCheckerUtils.startsWithPattern(headerBytes, JSON_OBJECT_FIRST_BYTE)) {
         return null;
       }
 
@@ -94,8 +88,7 @@ public class KeyframesDecoderExample {
       InputStream encodedInputStream = null;
       try {
         encodedInputStream = encodedImage.getInputStream();
-        return new CloseableKeyframesImage(
-            KFImageDeserializer.deserialize(encodedInputStream));
+        return new CloseableKeyframesImage(KFImageDeserializer.deserialize(encodedInputStream));
       } catch (IOException e) {
         e.printStackTrace();
         return null;
@@ -105,7 +98,7 @@ public class KeyframesDecoderExample {
     }
   }
 
-  private static class CloseableKeyframesImage extends CloseableImage {
+  private static class CloseableKeyframesImage extends BaseCloseableImage {
 
     private boolean mClosed;
     private final KFImage mImage;
@@ -141,6 +134,16 @@ public class KeyframesDecoderExample {
     @Override
     public int getHeight() {
       return (int) mImage.getCanvasSize()[1];
+    }
+
+    @Override
+    public QualityInfo getQualityInfo() {
+      return ImmutableQualityInfo.FULL_QUALITY;
+    }
+
+    @Override
+    public ImageInfo getImageInfo() {
+      return this;
     }
 
     @Override

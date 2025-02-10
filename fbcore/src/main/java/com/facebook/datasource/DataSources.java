@@ -1,26 +1,25 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.datasource;
 
 import com.facebook.common.internal.Supplier;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
-/**
- * Static utility methods pertaining to the {@link DataSource} interface.
- */
+/** Static utility methods pertaining to the {@link DataSource} interface. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DataSources {
 
-  private DataSources() {
-  }
+  private DataSources() {}
 
   public static <T> DataSource<T> immediateFailedDataSource(Throwable failure) {
     SimpleDataSource<T> simpleDataSource = SimpleDataSource.create();
@@ -32,6 +31,10 @@ public class DataSources {
     SimpleDataSource<T> simpleDataSource = SimpleDataSource.create();
     simpleDataSource.setResult(result);
     return simpleDataSource;
+  }
+
+  public static DataSource<Void> immediateSuccessfulDataSource() {
+    return SuccessfulVoidDataSource.INSTANCE;
   }
 
   public static <T> Supplier<DataSource<T>> getFailedDataSourceSupplier(final Throwable failure) {
@@ -48,16 +51,33 @@ public class DataSources {
    * been cancelled or has failed.
    *
    * @param dataSource The {@link DataSource} to wait for. The caller MUST close the data source
-   * after this method returned!
+   *     after this method returned!
    * @param <T> The type parameter for the {@link DataSource}
-   *
    * @return The final result of the {@link DataSource}. Intermediate results are ignored. Might be
-   * <code>null</code> if the data source has been cancelled.
-   *
+   *     <code>null</code> if the data source has been cancelled.
    * @throws Throwable if the {@link DataSource} has failed
    */
   @Nullable
   public static <T> T waitForFinalResult(DataSource<T> dataSource) throws Throwable {
+    return waitForFinalResult(dataSource, -1, TimeUnit.MILLISECONDS);
+  }
+
+  /**
+   * This methods blocks the calling thread until the {@link DataSource} has a final result, has
+   * been cancelled or has failed.
+   *
+   * @param dataSource The {@link DataSource} to wait for. The caller MUST close the data source
+   *     after this method returned!
+   * @param <T> The type parameter for the {@link DataSource}
+   * @param timeout The maximum time to wait for the final result
+   * @param unit The time unit of the timeout argument
+   * @return The final result of the {@link DataSource}. Intermediate results are ignored. Might be
+   *     <code>null</code> if the data source has been cancelled.
+   * @throws Throwable if the {@link DataSource} has failed
+   */
+  @Nullable
+  public static <T> T waitForFinalResult(DataSource<T> dataSource, long timeout, TimeUnit unit)
+      throws Throwable {
     final CountDownLatch latch = new CountDownLatch(1);
     final ValueHolder<T> resultHolder = new ValueHolder<>();
     final ValueHolder<Throwable> pendingException = new ValueHolder<>();
@@ -108,7 +128,13 @@ public class DataSources {
         });
 
     // wait for countdown() by the DataSubscriber
-    latch.await();
+    if (timeout < 0) {
+      latch.await();
+    } else {
+      if (!latch.await(timeout, unit)) {
+        throw new TimeoutException();
+      }
+    }
 
     // if the data source failed, throw its exception
     if (pendingException.value != null) {
@@ -120,7 +146,6 @@ public class DataSources {
 
   private static class ValueHolder<T> {
 
-    @Nullable
-    public T value = null;
+    @Nullable public T value = null;
   }
 }

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.memory;
@@ -25,18 +23,18 @@ import com.facebook.common.references.ResourceReleaser;
 public interface Pool<V> extends ResourceReleaser<V>, MemoryTrimmable {
 
   /**
-   * Gets a 'value' of size 'S' (or larger) from the pool, if available.
-   * Allocates a new value if necessary.
+   * Gets a 'value' of size 'S' (or larger) from the pool, if available. Allocates a new value if
+   * necessary.
+   *
    * @param size the logical size to allocate
    * @return a new value
    */
   V get(int size);
 
   /**
-   * Releases the given value to the pool.
-   * The pool may decide to
-   *  - reuse the value (for future {@link #get(int)} operations OR
-   *  - 'free' the value
+   * Releases the given value to the pool. The pool may decide to - reuse the value (for future
+   * {@link #get(int)} operations OR - 'free' the value
+   *
    * @param value the value to release to the pool
    */
   void release(V value);

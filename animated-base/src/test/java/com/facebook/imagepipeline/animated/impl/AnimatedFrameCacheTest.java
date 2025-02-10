@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.animated.impl;
@@ -25,10 +23,12 @@ import com.facebook.common.memory.MemoryTrimmableRegistry;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.util.ByteConstants;
 import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
-import com.facebook.imagepipeline.cache.BitmapCountingMemoryCacheFactory;
+import com.facebook.imagepipeline.cache.BitmapMemoryCacheTrimStrategy;
+import com.facebook.imagepipeline.cache.CountingLruBitmapMemoryCacheFactory;
 import com.facebook.imagepipeline.cache.CountingMemoryCache;
 import com.facebook.imagepipeline.cache.MemoryCacheParams;
 import com.facebook.imagepipeline.image.CloseableImage;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,19 +51,24 @@ public class AnimatedFrameCacheTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    MemoryCacheParams params = new MemoryCacheParams(
-        4 * ByteConstants.MB,
-        256,
-        Integer.MAX_VALUE,
-        Integer.MAX_VALUE,
-        Integer.MAX_VALUE);
+    MemoryCacheParams params =
+        new MemoryCacheParams(
+            4 * ByteConstants.MB,
+            256,
+            Integer.MAX_VALUE,
+            Integer.MAX_VALUE,
+            Integer.MAX_VALUE,
+            TimeUnit.MINUTES.toMillis(5));
     when(mMemoryCacheParamsSupplier.get()).thenReturn(params);
     CountingMemoryCache<CacheKey, CloseableImage> countingMemoryCache =
-        BitmapCountingMemoryCacheFactory.get(
-            mMemoryCacheParamsSupplier,
-            mMemoryTrimmableRegistry,
-            mPlatformBitmapFactory,
-            true);
+        new CountingLruBitmapMemoryCacheFactory()
+            .create(
+                mMemoryCacheParamsSupplier,
+                mMemoryTrimmableRegistry,
+                new BitmapMemoryCacheTrimStrategy(),
+                false,
+                false,
+                null);
     mCacheKey = new SimpleCacheKey("key");
     mAnimatedFrameCache = new AnimatedFrameCache(mCacheKey, countingMemoryCache);
     mFrame1 = CloseableReference.of(mock(CloseableImage.class));

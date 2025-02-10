@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.datasource;
@@ -13,8 +11,10 @@ import com.facebook.common.executors.CallerThreadExecutor;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -33,25 +33,46 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>Outcome (success/failure) of the data source provided by this supplier is determined by the
  * outcome of the highest quality data source (the first data source in the array).
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSource<T>> {
 
   private final List<Supplier<DataSource<T>>> mDataSourceSuppliers;
+  private final boolean mDataSourceLazy;
 
-  private IncreasingQualityDataSourceSupplier(List<Supplier<DataSource<T>>> dataSourceSuppliers) {
+  private IncreasingQualityDataSourceSupplier(
+      List<Supplier<DataSource<T>>> dataSourceSuppliers, boolean dataSourceLazy) {
     Preconditions.checkArgument(!dataSourceSuppliers.isEmpty(), "List of suppliers is empty!");
     mDataSourceSuppliers = dataSourceSuppliers;
+    mDataSourceLazy = dataSourceLazy;
   }
 
   /**
    * Creates a new data source supplier with increasing-quality strategy.
+   *
    * <p>Note: for performance reasons the list doesn't get cloned, so the caller of this method
    * should not modify the list once passed in here.
+   *
    * @param dataSourceSuppliers list of underlying suppliers
    */
   public static <T> IncreasingQualityDataSourceSupplier<T> create(
       List<Supplier<DataSource<T>>> dataSourceSuppliers) {
-    return new IncreasingQualityDataSourceSupplier<T>(dataSourceSuppliers);
+    return create(dataSourceSuppliers, false);
+  }
+
+  /**
+   * Creates a new data source supplier with increasing-quality strategy with optional lazy state
+   * creation.
+   *
+   * <p>Note: for performance reasons the list doesn't get cloned, so the caller of this method
+   * should not modify the list once passed in here.
+   *
+   * @param dataSourceSuppliers list of underlying suppliers
+   * @param dataSourceLazy if true, the state of data source would be created only if necessary
+   */
+  public static <T> IncreasingQualityDataSourceSupplier<T> create(
+      List<Supplier<DataSource<T>>> dataSourceSuppliers, boolean dataSourceLazy) {
+    return new IncreasingQualityDataSourceSupplier<T>(dataSourceSuppliers, dataSourceLazy);
   }
 
   @Override
@@ -65,7 +86,7 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
   }
 
   @Override
-  public boolean equals(Object other) {
+  public boolean equals(@Nullable Object other) {
     if (other == this) {
       return true;
     }
@@ -78,9 +99,7 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-        .add("list", mDataSourceSuppliers)
-        .toString();
+    return Objects.toStringHelper(this).add("list", mDataSourceSuppliers).toString();
   }
 
   @ThreadSafe
@@ -88,26 +107,44 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
 
     @GuardedBy("IncreasingQualityDataSource.this")
     private @Nullable ArrayList<DataSource<T>> mDataSources;
+
     @GuardedBy("IncreasingQualityDataSource.this")
     private int mIndexOfDataSourceWithResult;
-    private final int mNumberOfDataSources;
-    private final AtomicInteger mFinishedDataSources;
+
+    private int mNumberOfDataSources;
+    // NULLSAFE_FIXME[Field Not Initialized]
+    private AtomicInteger mFinishedDataSources;
     private @Nullable Throwable mDelayedError;
+    private @Nullable Map<String, Object> mDelayedExtras;
 
     public IncreasingQualityDataSource() {
-      mFinishedDataSources = new AtomicInteger(0);
-      final int n = mDataSourceSuppliers.size();
-      mNumberOfDataSources = n;
-      mIndexOfDataSourceWithResult = n;
-      mDataSources = new ArrayList<>(n);
-      for (int i = 0; i < n; i++) {
-        DataSource<T> dataSource = mDataSourceSuppliers.get(i).get();
-        mDataSources.add(dataSource);
-        dataSource.subscribe(new InternalDataSubscriber(i), CallerThreadExecutor.getInstance());
-        // there's no point in creating data sources of lower quality
-        // if the data source of a higher quality has some result already
-        if (dataSource.hasResult()) {
-          break;
+      if (!mDataSourceLazy) {
+        ensureDataSourceInitialized();
+      }
+    }
+
+    private void ensureDataSourceInitialized() {
+      if (mFinishedDataSources != null) {
+        return;
+      }
+
+      synchronized (IncreasingQualityDataSource.this) {
+        if (mFinishedDataSources == null) {
+          mFinishedDataSources = new AtomicInteger(0);
+          final int n = mDataSourceSuppliers.size();
+          mNumberOfDataSources = n;
+          mIndexOfDataSourceWithResult = n;
+          mDataSources = new ArrayList<>(n);
+          for (int i = 0; i < n; i++) {
+            DataSource<T> dataSource = mDataSourceSuppliers.get(i).get();
+            mDataSources.add(dataSource);
+            dataSource.subscribe(new InternalDataSubscriber(i), CallerThreadExecutor.getInstance());
+            // there's no point in creating data sources of lower quality
+            // if the data source of a higher quality has some result already
+            if (dataSource.hasResult()) {
+              break;
+            }
+          }
         }
       }
     }
@@ -130,18 +167,30 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
     @Override
     @Nullable
     public synchronized T getResult() {
+      if (mDataSourceLazy) {
+        ensureDataSourceInitialized();
+      }
+
       DataSource<T> dataSourceWithResult = getDataSourceWithResult();
       return (dataSourceWithResult != null) ? dataSourceWithResult.getResult() : null;
     }
 
     @Override
     public synchronized boolean hasResult() {
+      if (mDataSourceLazy) {
+        ensureDataSourceInitialized();
+      }
+
       DataSource<T> dataSourceWithResult = getDataSourceWithResult();
       return (dataSourceWithResult != null) && dataSourceWithResult.hasResult();
     }
 
     @Override
     public boolean close() {
+      if (mDataSourceLazy) {
+        ensureDataSourceInitialized();
+      }
+
       ArrayList<DataSource<T>> dataSources;
       synchronized (IncreasingQualityDataSource.this) {
         // it's fine to call {@code super.close()} within a synchronized block because we don't
@@ -165,15 +214,17 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
       // If the data source with the new result is our {@code mIndexOfDataSourceWithResult},
       // we have to notify our subscribers about the new result.
       if (dataSource == getDataSourceWithResult()) {
-        setResult(null, (index == 0) && dataSource.isFinished());
+        setResult(null, (index == 0) && dataSource.isFinished(), dataSource.getExtras());
       }
       maybeSetFailure();
     }
 
     private void onDataSourceFailed(int index, DataSource<T> dataSource) {
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       closeSafely(tryGetAndClearDataSource(index, dataSource));
       if (index == 0) {
         mDelayedError = dataSource.getFailureCause();
+        mDelayedExtras = dataSource.getExtras();
       }
       maybeSetFailure();
     }
@@ -181,14 +232,12 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
     private void maybeSetFailure() {
       int finished = mFinishedDataSources.incrementAndGet();
       if (finished == mNumberOfDataSources && mDelayedError != null) {
-        setFailure(mDelayedError);
+        setFailure(mDelayedError, mDelayedExtras);
       }
     }
 
     private void maybeSetIndexOfDataSourceWithResult(
-        int index,
-        DataSource<T> dataSource,
-        boolean isFinished) {
+        int index, DataSource<T> dataSource, boolean isFinished) {
       int oldIndexOfDataSourceWithResult;
       int newIndexOfDataSourceWithResult;
       synchronized (IncreasingQualityDataSource.this) {
@@ -202,14 +251,15 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
         // If we did have a result which came from another data source,
         // we'll only set {@code mIndexOfDataSourceWithResult} to point to the current data source
         // if it has finished (i.e. the new result is final), and is of higher quality.
-        if (getDataSourceWithResult() == null ||
-            (isFinished && index < mIndexOfDataSourceWithResult)) {
+        if (getDataSourceWithResult() == null
+            || (isFinished && index < mIndexOfDataSourceWithResult)) {
           newIndexOfDataSourceWithResult = index;
           mIndexOfDataSourceWithResult = index;
         }
       }
       // close data sources of lower quality than the one with the result
       for (int i = oldIndexOfDataSourceWithResult; i > newIndexOfDataSourceWithResult; i--) {
+        // NULLSAFE_FIXME[Parameter Not Nullable]
         closeSafely(getAndClearDataSource(i));
       }
     }
@@ -253,8 +303,7 @@ public class IncreasingQualityDataSourceSupplier<T> implements Supplier<DataSour
       }
 
       @Override
-      public void onCancellation(DataSource<T> dataSource) {
-      }
+      public void onCancellation(DataSource<T> dataSource) {}
 
       @Override
       public void onProgressUpdate(DataSource<T> dataSource) {

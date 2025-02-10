@@ -134,7 +134,7 @@
     <!-- Rounding border width-->
     <attr name="roundingBorderWidth" format="dimension"/>
     <!-- Rounding border color -->
-    <attr name="roundingBorderColor" format="color"/>
+    <attr name="roundingBorderColor" format="color|reference"/>
     <!-- Rounding border padding -->
     <attr name="roundingBorderPadding" format="dimension" />
 
@@ -185,9 +185,6 @@
 
     <!-- Progress bar Auto Rotate interval in milliseconds -->
     <attr name="progressBarAutoRotateInterval" />
-
-    <!-- Scale type of the actual image. -->
-    <attr name="actualImageScaleType" />
 
     <!-- A drawable or color to be used as a background. -->
     <attr name="backgroundImage" />

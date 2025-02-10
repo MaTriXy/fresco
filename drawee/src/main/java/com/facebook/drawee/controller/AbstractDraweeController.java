@@ -1,19 +1,21 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.controller;
 
 import static com.facebook.drawee.components.DraweeEventTracker.Event;
 
+import android.graphics.PointF;
+import android.graphics.Rect;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.view.MotionEvent;
+import com.facebook.common.internal.ImmutableMap;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.logging.FLog;
@@ -23,40 +25,62 @@ import com.facebook.datasource.DataSubscriber;
 import com.facebook.drawee.components.DeferredReleaser;
 import com.facebook.drawee.components.DraweeEventTracker;
 import com.facebook.drawee.components.RetryManager;
+import com.facebook.drawee.generic.GenericDraweeHierarchy;
 import com.facebook.drawee.gestures.GestureDetector;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.interfaces.DraweeHierarchy;
 import com.facebook.drawee.interfaces.SettableDraweeHierarchy;
+import com.facebook.fresco.middleware.MiddlewareUtils;
+import com.facebook.fresco.ui.common.ControllerListener2;
+import com.facebook.fresco.ui.common.ControllerListener2.Extras;
+import com.facebook.fresco.ui.common.ForwardingControllerListener2;
+import com.facebook.fresco.ui.common.LegacyOnFadeListener;
+import com.facebook.fresco.ui.common.OnFadeListener;
+import com.facebook.imagepipeline.systrace.FrescoSystrace;
+import com.facebook.infer.annotation.Nullsafe;
 import com.facebook.infer.annotation.ReturnsOwnership;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Abstract Drawee controller that implements common functionality
- * regardless of the backend used to fetch the image.
+ * Abstract Drawee controller that implements common functionality regardless of the backend used to
+ * fetch the image.
  *
- * All methods should be called on the main UI thread.
+ * <p>All methods should be called on the main UI thread.
  *
  * @param <T> image type (e.g. Bitmap)
  * @param <INFO> image info type (can be same as T)
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @NotThreadSafe
-public abstract class AbstractDraweeController<T, INFO> implements
-    DraweeController,
-    DeferredReleaser.Releasable,
-    GestureDetector.ClickListener {
+public abstract class AbstractDraweeController<T, INFO>
+    implements DraweeController, DeferredReleaser.Releasable, GestureDetector.ClickListener {
+
+  private static final Map<String, Object> COMPONENT_EXTRAS =
+      ImmutableMap.<String, Object>of("component_tag", "drawee");
+  private static final Map<String, Object> SHORTCUT_EXTRAS =
+      ImmutableMap.<String, Object>of(
+          "origin", "memory_bitmap",
+          "origin_sub", "shortcut");
 
   /**
-   * This class is used to allow an optimization of not creating a ForwardingControllerListener
-   * when there is only a single controller listener.
+   * This class is used to allow an optimization of not creating a ForwardingControllerListener when
+   * there is only a single controller listener.
    */
   private static class InternalForwardingListener<INFO> extends ForwardingControllerListener<INFO> {
     public static <INFO> InternalForwardingListener<INFO> createInternal(
         ControllerListener<? super INFO> listener1, ControllerListener<? super INFO> listener2) {
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.beginSection("AbstractDraweeController#createInternal");
+      }
       InternalForwardingListener<INFO> forwarder = new InternalForwardingListener<INFO>();
       forwarder.addListener(listener1);
       forwarder.addListener(listener2);
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
       return forwarder;
     }
   }
@@ -71,8 +95,11 @@ public abstract class AbstractDraweeController<T, INFO> implements
   // Optional components
   private @Nullable RetryManager mRetryManager;
   private @Nullable GestureDetector mGestureDetector;
-  private @Nullable ControllerListener<INFO> mControllerListener;
   private @Nullable ControllerViewportVisibilityListener mControllerViewportVisibilityListener;
+  protected @Nullable ControllerListener<INFO> mControllerListener;
+  protected ForwardingControllerListener2<INFO> mControllerListener2 =
+      new ForwardingControllerListener2<>();
+  protected @Nullable LegacyOnFadeListener mLegacyOnFadeListener;
 
   // Hierarchy
   private @Nullable SettableDraweeHierarchy mSettableDraweeHierarchy;
@@ -91,7 +118,10 @@ public abstract class AbstractDraweeController<T, INFO> implements
   private @Nullable String mContentDescription;
   private @Nullable DataSource<T> mDataSource;
   private @Nullable T mFetchedImage;
-  private @Nullable Drawable mDrawable;
+  private boolean mJustConstructed = true;
+  private boolean mLogWithHighSamplingRate = false;
+
+  protected @Nullable Drawable mDrawable;
 
   public AbstractDraweeController(
       DeferredReleaser deferredReleaser,
@@ -100,24 +130,30 @@ public abstract class AbstractDraweeController<T, INFO> implements
       Object callerContext) {
     mDeferredReleaser = deferredReleaser;
     mUiThreadImmediateExecutor = uiThreadImmediateExecutor;
-    init(id, callerContext, true);
+    init(id, callerContext);
   }
 
   /**
-   * Initializes this controller with the new id and caller context.
-   * This allows for reusing of the existing controller instead of instantiating a new one.
-   * This method should be called when the controller is in detached state.
+   * Initializes this controller with the new id and caller context. This allows for reusing of the
+   * existing controller instead of instantiating a new one. This method should be called when the
+   * controller is in detached state.
+   *
    * @param id unique id for this controller
    * @param callerContext tag and context for this controller
    */
   protected void initialize(String id, Object callerContext) {
-    init(id, callerContext, false);
+    init(id, callerContext);
+    mJustConstructed = false;
+    mLogWithHighSamplingRate = false;
   }
 
-  private void init(String id, Object callerContext, boolean justConstructed) {
+  private synchronized void init(String id, Object callerContext) {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("AbstractDraweeController#init");
+    }
     mEventTracker.recordEvent(Event.ON_INIT_CONTROLLER);
     // cancel deferred release
-    if (!justConstructed && mDeferredReleaser != null) {
+    if (!mJustConstructed && mDeferredReleaser != null) {
       mDeferredReleaser.cancelDeferredRelease(this);
     }
     // reinitialize mutable state (fetch state)
@@ -142,6 +178,7 @@ public abstract class AbstractDraweeController<T, INFO> implements
     // clear hierarchy and controller overlay
     if (mSettableDraweeHierarchy != null) {
       mSettableDraweeHierarchy.reset();
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       mSettableDraweeHierarchy.setControllerOverlay(null);
       mSettableDraweeHierarchy = null;
     }
@@ -152,6 +189,13 @@ public abstract class AbstractDraweeController<T, INFO> implements
     }
     mId = id;
     mCallerContext = callerContext;
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
+    }
+
+    if (mLegacyOnFadeListener != null) {
+      setUpLoggingListener();
+    }
   }
 
   @Override
@@ -173,7 +217,9 @@ public abstract class AbstractDraweeController<T, INFO> implements
     boolean wasRequestSubmitted = mIsRequestSubmitted;
     mIsRequestSubmitted = false;
     mHasFetchFailed = false;
+    Map<String, Object> datasourceExtras = null, imageExtras = null;
     if (mDataSource != null) {
+      datasourceExtras = mDataSource.getExtras();
       mDataSource.close();
       mDataSource = null;
     }
@@ -185,12 +231,13 @@ public abstract class AbstractDraweeController<T, INFO> implements
     }
     mDrawable = null;
     if (mFetchedImage != null) {
+      imageExtras = obtainExtrasFromImage(getImageInfo(mFetchedImage));
       logMessageAndImage("release", mFetchedImage);
       releaseImage(mFetchedImage);
       mFetchedImage = null;
     }
     if (wasRequestSubmitted) {
-      getControllerListener().onRelease(mId);
+      reportRelease(datasourceExtras, imageExtras);
     }
   }
 
@@ -205,7 +252,8 @@ public abstract class AbstractDraweeController<T, INFO> implements
   }
 
   /** Gets retry manager. */
-  @ReturnsOwnership protected RetryManager getRetryManager() {
+  @ReturnsOwnership
+  protected RetryManager getRetryManager() {
     if (mRetryManager == null) {
       mRetryManager = new RetryManager();
     }
@@ -230,8 +278,17 @@ public abstract class AbstractDraweeController<T, INFO> implements
     mRetainImageOnFailure = enabled;
   }
 
+  protected boolean isLogWithHighSamplingRate() {
+    return mLogWithHighSamplingRate;
+  }
+
+  protected void setLogWithHighSamplingRate(boolean logWithHighSamplingRate) {
+    mLogWithHighSamplingRate = logWithHighSamplingRate;
+  }
+
   /** Gets accessibility content description. */
   @Override
+  // NULLSAFE_FIXME[Inconsistent Subclass Return Annotation]
   public @Nullable String getContentDescription() {
     return mContentDescription;
   }
@@ -250,14 +307,29 @@ public abstract class AbstractDraweeController<T, INFO> implements
       return;
     }
     if (mControllerListener != null) {
-      mControllerListener = InternalForwardingListener.createInternal(
-          mControllerListener,
-          controllerListener);
+      mControllerListener =
+          InternalForwardingListener.createInternal(mControllerListener, controllerListener);
       return;
     }
     // Listener only receives <INFO>, it never produces one.
     // That means if it can accept <? super INFO>, it can very well accept <INFO>.
     mControllerListener = (ControllerListener<INFO>) controllerListener;
+  }
+
+  public void addControllerListener2(ControllerListener2<INFO> controllerListener2) {
+    mControllerListener2.addListener(controllerListener2);
+  }
+
+  public void removeControllerListener2(ControllerListener2<INFO> controllerListener2) {
+    mControllerListener2.removeListener(controllerListener2);
+  }
+
+  public void setLoggingListener(final LegacyOnFadeListener legacyOnFadeListener) {
+    mLegacyOnFadeListener = legacyOnFadeListener;
+  }
+
+  protected @Nullable LegacyOnFadeListener getLoggingListener() {
+    return mLegacyOnFadeListener;
   }
 
   /** Removes controller listener. */
@@ -280,6 +352,10 @@ public abstract class AbstractDraweeController<T, INFO> implements
     return mControllerListener;
   }
 
+  protected ControllerListener2<INFO> getControllerListener2() {
+    return mControllerListener2;
+  }
+
   /** Sets the controller viewport visibility listener */
   public void setControllerViewportVisibilityListener(
       @Nullable ControllerViewportVisibilityListener controllerViewportVisibilityListener) {
@@ -288,8 +364,7 @@ public abstract class AbstractDraweeController<T, INFO> implements
 
   /** Gets the hierarchy */
   @Override
-  public @Nullable
-  DraweeHierarchy getHierarchy() {
+  public @Nullable DraweeHierarchy getHierarchy() {
     return mSettableDraweeHierarchy;
   }
 
@@ -297,17 +372,15 @@ public abstract class AbstractDraweeController<T, INFO> implements
    * Sets the hierarchy.
    *
    * <p>The controller should be detached when this method is called.
+   *
    * @param hierarchy This must be an instance of {@link SettableDraweeHierarchy}
    */
   @Override
   public void setHierarchy(@Nullable DraweeHierarchy hierarchy) {
     if (FLog.isLoggable(FLog.VERBOSE)) {
       FLog.v(
-          TAG,
-          "controller %x %s: setHierarchy: %s",
-          System.identityHashCode(this),
-          mId,
-          hierarchy);
+          // NULLSAFE_FIXME[Parameter Not Nullable]
+          TAG, "controller %x %s: setHierarchy: %s", System.identityHashCode(this), mId, hierarchy);
     }
     mEventTracker.recordEvent(
         (hierarchy != null) ? Event.ON_SET_HIERARCHY : Event.ON_CLEAR_HIERARCHY);
@@ -318,6 +391,7 @@ public abstract class AbstractDraweeController<T, INFO> implements
     }
     // clear the existing hierarchy
     if (mSettableDraweeHierarchy != null) {
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       mSettableDraweeHierarchy.setControllerOverlay(null);
       mSettableDraweeHierarchy = null;
     }
@@ -325,7 +399,37 @@ public abstract class AbstractDraweeController<T, INFO> implements
     if (hierarchy != null) {
       Preconditions.checkArgument(hierarchy instanceof SettableDraweeHierarchy);
       mSettableDraweeHierarchy = (SettableDraweeHierarchy) hierarchy;
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       mSettableDraweeHierarchy.setControllerOverlay(mControllerOverlay);
+    }
+
+    if (mLegacyOnFadeListener != null) {
+      setUpLoggingListener();
+    }
+  }
+
+  private void setUpLoggingListener() {
+    if (mSettableDraweeHierarchy instanceof GenericDraweeHierarchy) {
+      ((GenericDraweeHierarchy) mSettableDraweeHierarchy)
+          .setOnFadeListener(
+              new OnFadeListener() {
+                @Override
+                public void onFadeFinished() {
+                  if (mLegacyOnFadeListener != null) {
+                    mLegacyOnFadeListener.onFadeFinished(mId);
+                  }
+                }
+
+                @Override
+                public void onShownImmediately() {}
+
+                @Override
+                public void onFadeStarted() {
+                  if (mLegacyOnFadeListener != null) {
+                    mLegacyOnFadeListener.onFadeStarted(mId);
+                  }
+                }
+              });
     }
   }
 
@@ -333,6 +437,7 @@ public abstract class AbstractDraweeController<T, INFO> implements
   protected void setControllerOverlay(@Nullable Drawable controllerOverlay) {
     mControllerOverlay = controllerOverlay;
     if (mSettableDraweeHierarchy != null) {
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       mSettableDraweeHierarchy.setControllerOverlay(mControllerOverlay);
     }
   }
@@ -344,6 +449,9 @@ public abstract class AbstractDraweeController<T, INFO> implements
 
   @Override
   public void onAttach() {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("AbstractDraweeController#onAttach");
+    }
     if (FLog.isLoggable(FLog.VERBOSE)) {
       FLog.v(
           TAG,
@@ -359,16 +467,25 @@ public abstract class AbstractDraweeController<T, INFO> implements
     if (!mIsRequestSubmitted) {
       submitRequest();
     }
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
+    }
   }
 
   @Override
   public void onDetach() {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("AbstractDraweeController#onDetach");
+    }
     if (FLog.isLoggable(FLog.VERBOSE)) {
       FLog.v(TAG, "controller %x %s: onDetach", System.identityHashCode(this), mId);
     }
     mEventTracker.recordEvent(Event.ON_DETACH_CONTROLLER);
     mIsAttached = false;
     mDeferredReleaser.scheduleDeferredRelease(this);
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
+    }
   }
 
   @Override
@@ -416,7 +533,9 @@ public abstract class AbstractDraweeController<T, INFO> implements
       FLog.v(TAG, "controller %x %s: onClick", System.identityHashCode(this), mId);
     }
     if (shouldRetryOnTap()) {
+      // NULLSAFE_FIXME[Nullable Dereference]
       mRetryManager.notifyTapToRetry();
+      // NULLSAFE_FIXME[Nullable Dereference]
       mSettableDraweeHierarchy.reset();
       submitRequest();
       return true;
@@ -425,22 +544,38 @@ public abstract class AbstractDraweeController<T, INFO> implements
   }
 
   protected void submitRequest() {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("AbstractDraweeController#submitRequest");
+    }
     final T closeableImage = getCachedImage();
     if (closeableImage != null) {
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.beginSection("AbstractDraweeController#submitRequest->cache");
+      }
       mDataSource = null;
       mIsRequestSubmitted = true;
       mHasFetchFailed = false;
       mEventTracker.recordEvent(Event.ON_SUBMIT_CACHE_HIT);
-      getControllerListener().onSubmit(mId, mCallerContext);
-      onNewResultInternal(mId, mDataSource, closeableImage, 1.0f, true, true);
+      // NULLSAFE_FIXME[Parameter Not Nullable]
+      reportSubmit(mDataSource, getImageInfo(closeableImage));
+      onImageLoadedFromCacheImmediately(mId, closeableImage);
+      // NULLSAFE_FIXME[Parameter Not Nullable]
+      onNewResultInternal(mId, mDataSource, closeableImage, 1.0f, true, true, true);
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
       return;
     }
     mEventTracker.recordEvent(Event.ON_DATASOURCE_SUBMIT);
-    getControllerListener().onSubmit(mId, mCallerContext);
+    // NULLSAFE_FIXME[Nullable Dereference]
     mSettableDraweeHierarchy.setProgress(0, true);
     mIsRequestSubmitted = true;
     mHasFetchFailed = false;
     mDataSource = getDataSource();
+    reportSubmit(mDataSource, null);
     if (FLog.isLoggable(FLog.VERBOSE)) {
       FLog.v(
           TAG,
@@ -458,18 +593,23 @@ public abstract class AbstractDraweeController<T, INFO> implements
             // isFinished must be obtained before image, otherwise we might set intermediate result
             // as final image.
             boolean isFinished = dataSource.isFinished();
+            boolean hasMultipleResults = dataSource.hasMultipleResults();
             float progress = dataSource.getProgress();
             T image = dataSource.getResult();
             if (image != null) {
-              onNewResultInternal(id, dataSource, image, progress, isFinished, wasImmediate);
+              onNewResultInternal(
+                  id, dataSource, image, progress, isFinished, wasImmediate, hasMultipleResults);
             } else if (isFinished) {
               onFailureInternal(id, dataSource, new NullPointerException(), /* isFinished */ true);
             }
           }
+
           @Override
           public void onFailureImpl(DataSource<T> dataSource) {
+            // NULLSAFE_FIXME[Parameter Not Nullable]
             onFailureInternal(id, dataSource, dataSource.getFailureCause(), /* isFinished */ true);
           }
+
           @Override
           public void onProgressUpdate(DataSource<T> dataSource) {
             boolean isFinished = dataSource.isFinished();
@@ -478,6 +618,9 @@ public abstract class AbstractDraweeController<T, INFO> implements
           }
         };
     mDataSource.subscribe(dataSubscriber, mUiThreadImmediateExecutor);
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
+    }
   }
 
   private void onNewResultInternal(
@@ -486,64 +629,81 @@ public abstract class AbstractDraweeController<T, INFO> implements
       @Nullable T image,
       float progress,
       boolean isFinished,
-      boolean wasImmediate) {
-    // ignore late callbacks (data source that returned the new result is not the one we expected)
-    if (!isExpectedDataSource(id, dataSource)) {
-      logMessageAndImage("ignore_old_datasource @ onNewResult", image);
-      releaseImage(image);
-      dataSource.close();
-      return;
-    }
-    mEventTracker.recordEvent(
-        isFinished ? Event.ON_DATASOURCE_RESULT : Event.ON_DATASOURCE_RESULT_INT);
-    // create drawable
-    Drawable drawable;
+      boolean wasImmediate,
+      boolean deliverTempResult) {
     try {
-      drawable = createDrawable(image);
-    } catch (Exception exception) {
-      logMessageAndImage("drawable_failed @ onNewResult", image);
-      releaseImage(image);
-      onFailureInternal(id, dataSource, exception, isFinished);
-      return;
-    }
-    T previousImage = mFetchedImage;
-    Drawable previousDrawable = mDrawable;
-    mFetchedImage = image;
-    mDrawable = drawable;
-    try {
-      // set the new image
-      if (isFinished) {
-        logMessageAndImage("set_final_result @ onNewResult", image);
-        mDataSource = null;
-        mSettableDraweeHierarchy.setImage(drawable, 1f, wasImmediate);
-        getControllerListener().onFinalImageSet(id, getImageInfo(image), getAnimatable());
-        // IMPORTANT: do not execute any instance-specific code after this point
-      } else {
-        logMessageAndImage("set_intermediate_result @ onNewResult", image);
-        mSettableDraweeHierarchy.setImage(drawable, progress, wasImmediate);
-        getControllerListener().onIntermediateImageSet(id, getImageInfo(image));
-        // IMPORTANT: do not execute any instance-specific code after this point
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.beginSection("AbstractDraweeController#onNewResultInternal");
+      }
+      // ignore late callbacks (data source that returned the new result is not the one we expected)
+      if (!isExpectedDataSource(id, dataSource)) {
+        logMessageAndImage("ignore_old_datasource @ onNewResult", image);
+        releaseImage(image);
+        dataSource.close();
+        return;
+      }
+      mEventTracker.recordEvent(
+          isFinished ? Event.ON_DATASOURCE_RESULT : Event.ON_DATASOURCE_RESULT_INT);
+      // create drawable
+      Drawable drawable;
+      try {
+        drawable = createDrawable(image);
+      } catch (Exception exception) {
+        logMessageAndImage("drawable_failed @ onNewResult", image);
+        releaseImage(image);
+        onFailureInternal(id, dataSource, exception, isFinished);
+        return;
+      }
+      T previousImage = mFetchedImage;
+      Drawable previousDrawable = mDrawable;
+      mFetchedImage = image;
+      mDrawable = drawable;
+      try {
+        // set the new image
+        if (isFinished) {
+          logMessageAndImage("set_final_result @ onNewResult", image);
+          mDataSource = null;
+          getSettableDraweeHierarchy().setImage(drawable, 1f, wasImmediate);
+          reportSuccess(id, image, dataSource);
+        } else if (deliverTempResult) {
+          logMessageAndImage("set_temporary_result @ onNewResult", image);
+          getSettableDraweeHierarchy().setImage(drawable, 1f, wasImmediate);
+          reportSuccess(id, image, dataSource);
+          // IMPORTANT: do not execute any instance-specific code after this point
+        } else {
+          logMessageAndImage("set_intermediate_result @ onNewResult", image);
+          getSettableDraweeHierarchy().setImage(drawable, progress, wasImmediate);
+          reportIntermediateSet(id, image);
+          // IMPORTANT: do not execute any instance-specific code after this point
+        }
+      } finally {
+        if (previousDrawable != null && previousDrawable != drawable) {
+          releaseDrawable(previousDrawable);
+        }
+        if (previousImage != null && previousImage != image) {
+          logMessageAndImage("release_previous_result @ onNewResult", previousImage);
+          releaseImage(previousImage);
+        }
       }
     } finally {
-      if (previousDrawable != null && previousDrawable != drawable) {
-        releaseDrawable(previousDrawable);
-      }
-      if (previousImage != null && previousImage != image) {
-        logMessageAndImage("release_previous_result @ onNewResult", previousImage);
-        releaseImage(previousImage);
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
       }
     }
   }
 
   private void onFailureInternal(
-      String id,
-      DataSource<T> dataSource,
-      Throwable throwable,
-      boolean isFinished) {
+      String id, DataSource<T> dataSource, Throwable throwable, boolean isFinished) {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("AbstractDraweeController#onFailureInternal");
+    }
     // ignore late callbacks (data source that failed is not the one we expected)
     if (!isExpectedDataSource(id, dataSource)) {
       logMessageAndFailure("ignore_old_datasource @ onFailure", throwable);
       dataSource.close();
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
       return;
     }
     mEventTracker.recordEvent(
@@ -554,34 +714,39 @@ public abstract class AbstractDraweeController<T, INFO> implements
       mDataSource = null;
       mHasFetchFailed = true;
       // Set the previously available image if available.
-      if (mRetainImageOnFailure && mDrawable != null) {
-        mSettableDraweeHierarchy.setImage(mDrawable, 1f, true);
-      } else if (shouldRetryOnTap()) {
-        mSettableDraweeHierarchy.setRetry(throwable);
-      } else {
-        mSettableDraweeHierarchy.setFailure(throwable);
+      final SettableDraweeHierarchy hierarchy = mSettableDraweeHierarchy;
+      if (hierarchy != null) {
+        if (mRetainImageOnFailure && mDrawable != null) {
+          hierarchy.setImage(mDrawable, 1f, true);
+        } else if (shouldRetryOnTap()) {
+          hierarchy.setRetry(throwable);
+        } else {
+          hierarchy.setFailure(throwable);
+        }
       }
-      getControllerListener().onFailure(mId, throwable);
+      reportFailure(throwable, dataSource);
       // IMPORTANT: do not execute any instance-specific code after this point
     } else {
       logMessageAndFailure("intermediate_failed @ onFailure", throwable);
-      getControllerListener().onIntermediateImageFailed(mId, throwable);
+      reportIntermediateFailure(throwable);
       // IMPORTANT: do not execute any instance-specific code after this point
+    }
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
     }
   }
 
   private void onProgressUpdateInternal(
-      String id,
-      DataSource<T> dataSource,
-      float progress,
-      boolean isFinished) {
+      String id, DataSource<T> dataSource, float progress, boolean isFinished) {
     // ignore late callbacks (data source that failed is not the one we expected)
     if (!isExpectedDataSource(id, dataSource)) {
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       logMessageAndFailure("ignore_old_datasource @ onProgress", null);
       dataSource.close();
       return;
     }
     if (!isFinished) {
+      // NULLSAFE_FIXME[Nullable Dereference]
       mSettableDraweeHierarchy.setProgress(progress, false);
     }
   }
@@ -623,6 +788,7 @@ public abstract class AbstractDraweeController<T, INFO> implements
   }
 
   @Override
+  // NULLSAFE_FIXME[Inconsistent Subclass Return Annotation]
   public @Nullable Animatable getAnimatable() {
     return (mDrawable instanceof Animatable) ? (Animatable) mDrawable : null;
   }
@@ -656,7 +822,98 @@ public abstract class AbstractDraweeController<T, INFO> implements
         .toString();
   }
 
-  protected T getCachedImage() {
+  protected @Nullable T getCachedImage() {
     return null;
+  }
+
+  protected void onImageLoadedFromCacheImmediately(String id, T cachedImage) {}
+
+  protected void reportSubmit(DataSource<T> dataSource, @Nullable INFO info) {
+    getControllerListener().onSubmit(mId, mCallerContext);
+    getControllerListener2()
+        .onSubmit(mId, mCallerContext, obtainExtras(dataSource, info, getMainUri()));
+  }
+
+  private void reportIntermediateSet(String id, @Nullable T image) {
+    INFO info = getImageInfo(image);
+    getControllerListener().onIntermediateImageSet(id, info);
+    getControllerListener2().onIntermediateImageSet(id, info);
+  }
+
+  private void reportIntermediateFailure(Throwable throwable) {
+    getControllerListener().onIntermediateImageFailed(mId, throwable);
+    getControllerListener2().onIntermediateImageFailed(mId);
+  }
+
+  private void reportSuccess(String id, @Nullable T image, @Nullable DataSource<T> dataSource) {
+    INFO info = getImageInfo(image);
+    getControllerListener().onFinalImageSet(id, info, getAnimatable());
+    getControllerListener2().onFinalImageSet(id, info, obtainExtras(dataSource, info, null));
+  }
+
+  private void reportFailure(Throwable throwable, @Nullable DataSource<T> dataSource) {
+    final Extras extras = obtainExtras(dataSource, null, null);
+    getControllerListener().onFailure(mId, throwable);
+    getControllerListener2().onFailure(mId, throwable, extras);
+  }
+
+  private void reportRelease(
+      @Nullable Map<String, Object> datasourceExtras, @Nullable Map<String, Object> imageExtras) {
+    getControllerListener().onRelease(mId);
+    getControllerListener2().onRelease(mId, obtainExtras(datasourceExtras, imageExtras, null));
+  }
+
+  private Extras obtainExtras(
+      @Nullable Map<String, Object> datasourceExtras,
+      @Nullable Map<String, Object> imageExtras,
+      @Nullable Uri mainUri) {
+    String scaleType = null;
+    PointF focusPoint = null;
+    final SettableDraweeHierarchy hierarchy = mSettableDraweeHierarchy;
+    if (hierarchy instanceof GenericDraweeHierarchy) {
+      scaleType = String.valueOf(((GenericDraweeHierarchy) hierarchy).getActualImageScaleType());
+      focusPoint = ((GenericDraweeHierarchy) hierarchy).getActualImageFocusPoint();
+    }
+    return MiddlewareUtils.obtainExtras(
+        COMPONENT_EXTRAS,
+        SHORTCUT_EXTRAS,
+        datasourceExtras,
+        null,
+        getDimensions(),
+        scaleType,
+        focusPoint,
+        imageExtras,
+        getCallerContext(),
+        isLogWithHighSamplingRate(),
+        mainUri);
+  }
+
+  protected @Nullable Uri getMainUri() {
+    return null;
+  }
+  ;
+
+  private Extras obtainExtras(
+      @Nullable DataSource<T> datasource, @Nullable INFO info, @Nullable Uri mainUri) {
+    return obtainExtras(
+        datasource == null ? null : datasource.getExtras(), obtainExtrasFromImage(info), mainUri);
+  }
+
+  private @Nullable Rect getDimensions() {
+    if (mSettableDraweeHierarchy == null) {
+      return null;
+    }
+    return mSettableDraweeHierarchy.getBounds();
+  }
+
+  public abstract @Nullable Map<String, Object> obtainExtrasFromImage(INFO info);
+
+  private SettableDraweeHierarchy getSettableDraweeHierarchy() {
+    SettableDraweeHierarchy hierarchy = mSettableDraweeHierarchy;
+    if (hierarchy == null) {
+      throw new IllegalStateException(
+          "mSettableDraweeHierarchy is null; Caller context: " + mCallerContext);
+    }
+    return hierarchy;
   }
 }

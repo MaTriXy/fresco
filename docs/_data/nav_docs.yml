@@ -34,6 +34,7 @@
   - id: progressive-jpegs
   - id: animations
   - id: webp-support
+  - id: customizing-image-formats
 - title: Troubleshooting & FAQ
   items:
   - id: faq

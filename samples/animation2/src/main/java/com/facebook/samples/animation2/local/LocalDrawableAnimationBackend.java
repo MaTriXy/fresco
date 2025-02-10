@@ -1,13 +1,8 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.samples.animation2.local;
@@ -22,10 +17,9 @@ import android.util.SparseArray;
 import com.facebook.fresco.animation.backend.AnimationBackend;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 
-/**
- * Local drawable animation backend that chains local drawables together.
- */
+/** Local drawable animation backend that chains local drawables together. */
 public class LocalDrawableAnimationBackend implements AnimationBackend {
 
   private final Resources mResources;
@@ -103,8 +97,37 @@ public class LocalDrawableAnimationBackend implements AnimationBackend {
   }
 
   @Override
+  public int width() {
+    return INTRINSIC_DIMENSION_UNSET;
+  }
+
+  @Override
+  public int height() {
+    return INTRINSIC_DIMENSION_UNSET;
+  }
+
+  @Override
+  public int getLoopDurationMs() {
+    int total = 0;
+    for (int i = 0; i < getFrameCount(); i++) {
+      total += getFrameDurationMs(i);
+    }
+    return total;
+  }
+
+  @Override
   public void clear() {
     mCache.clear();
+  }
+
+  @Override
+  public void preloadAnimation() {
+    // not needed
+  }
+
+  @Override
+  public void setAnimationListener(@Nullable Listener listener) {
+    // unimplemented
   }
 
   @Override
@@ -112,7 +135,7 @@ public class LocalDrawableAnimationBackend implements AnimationBackend {
     return 0;
   }
 
-  public static class Builder {
+  public static final class Builder {
 
     private final List<Integer> mResourceIds;
     private final Resources mResources;

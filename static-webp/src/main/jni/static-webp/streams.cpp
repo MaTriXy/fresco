@@ -1,19 +1,16 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
-#include <vector>
 #include <stdint.h>
+#include <vector>
 
 #include <jni.h>
 
 #include "exceptions.h"
-#include "java_globals.h"
 #include "streams.h"
 
 namespace facebook {
@@ -24,9 +21,22 @@ std::vector<uint8_t> readStreamFully(JNIEnv* env, jobject is) {
   jbyteArray java_buffer = env->NewByteArray(kDefaultBufferSize);
   RETURNVAL_IF_EXCEPTION_PENDING({});
 
+  static jmethodID midInputStreamRead = [&]() -> jmethodID {
+    jclass isClass = env->FindClass("java/io/InputStream");
+    THROW_AND_RETURNVAL_IF(
+        isClass == nullptr, "could not find InputStream", nullptr);
+
+    jmethodID id = env->GetMethodID(isClass, "read", "([B)I");
+    THROW_AND_RETURNVAL_IF(
+        midInputStreamRead == nullptr,
+        "failed to register InputStream.read",
+        nullptr);
+    return id;
+  }();
+
   while (true) {
     const int chunk_size =
-      env->CallIntMethod(is, midInputStreamRead, java_buffer);
+        env->CallIntMethod(is, midInputStreamRead, java_buffer);
     RETURNVAL_IF_EXCEPTION_PENDING({});
 
     if (chunk_size < 0) {
@@ -36,9 +46,7 @@ std::vector<uint8_t> readStreamFully(JNIEnv* env, jobject is) {
     if (chunk_size > 0) {
       jbyte* data = env->GetByteArrayElements(java_buffer, NULL);
       THROW_AND_RETURNVAL_IF(
-          data == nullptr,
-          "Could not get byte array region",
-            {});
+          data == nullptr, "Could not get byte array region", {});
       read_buffer.insert(read_buffer.end(), data, data + chunk_size);
       env->ReleaseByteArrayElements(java_buffer, data, JNI_ABORT);
       RETURNVAL_IF_EXCEPTION_PENDING({});
@@ -50,4 +58,5 @@ std::vector<uint8_t> readStreamFully(JNIEnv* env, jobject is) {
   }
 }
 
-} }
+} // namespace imagepipeline
+} // namespace facebook

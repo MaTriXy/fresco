@@ -1,16 +1,16 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.animation.backend;
 
-/**
- * Basic animation metadata: Frame and loop count & duration
- */
+import com.facebook.infer.annotation.Nullsafe;
+
+/** Basic animation metadata: Frame and loop count & duration */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public interface AnimationInformation {
 
   /**
@@ -33,6 +33,23 @@ public interface AnimationInformation {
    * @return the duration in ms
    */
   int getFrameDurationMs(int frameNumber);
+
+  /**
+   * Loop duration in ms
+   *
+   * @return duration in ms
+   */
+  int getLoopDurationMs();
+
+  /**
+   * @return Animation asset width
+   */
+  int width();
+
+  /**
+   * @return Animation asset height
+   */
+  int height();
 
   /**
    * Get the number of loops the animation has or {@link #LOOP_COUNT_INFINITE} for infinite looping.

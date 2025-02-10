@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.cache;
@@ -13,14 +11,15 @@ import com.facebook.cache.common.CacheKey;
 import com.facebook.common.internal.Supplier;
 import com.facebook.common.memory.MemoryTrimmableRegistry;
 import com.facebook.common.memory.PooledByteBuffer;
-import com.facebook.imagepipeline.bitmaps.PlatformBitmapFactory;
+import com.facebook.infer.annotation.Nullsafe;
 
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class EncodedCountingMemoryCacheFactory {
 
   public static CountingMemoryCache<CacheKey, PooledByteBuffer> get(
-       Supplier<MemoryCacheParams> encodedMemoryCacheParamsSupplier,
-       MemoryTrimmableRegistry memoryTrimmableRegistry,
-       PlatformBitmapFactory platformBitmapFactory) {
+      Supplier<MemoryCacheParams> encodedMemoryCacheParamsSupplier,
+      MemoryTrimmableRegistry memoryTrimmableRegistry,
+      MemoryCache.CacheTrimStrategy cacheTrimStrategy) {
 
     ValueDescriptor<PooledByteBuffer> valueDescriptor =
         new ValueDescriptor<PooledByteBuffer>() {
@@ -30,14 +29,13 @@ public class EncodedCountingMemoryCacheFactory {
           }
         };
 
-    CountingMemoryCache.CacheTrimStrategy trimStrategy = new NativeMemoryCacheTrimStrategy();
-
     CountingMemoryCache<CacheKey, PooledByteBuffer> countingCache =
-        new CountingMemoryCache<>(
+        new LruCountingMemoryCache<>(
             valueDescriptor,
-            trimStrategy,
+            cacheTrimStrategy,
             encodedMemoryCacheParamsSupplier,
-            platformBitmapFactory,
+            null,
+            false,
             false);
 
     memoryTrimmableRegistry.registerMemoryTrimmable(countingCache);

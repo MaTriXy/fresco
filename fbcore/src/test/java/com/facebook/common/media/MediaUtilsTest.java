@@ -1,15 +1,13 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.media;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import android.webkit.MimeTypeMap;
 import org.junit.Test;
@@ -60,7 +58,7 @@ public class MediaUtilsTest {
   @Test
   public void testExtractMimeNativelySupportedFileExtension() {
     ShadowMimeTypeMap mimeTypeMap = Shadows.shadowOf(MimeTypeMap.getSingleton());
-    mimeTypeMap.addExtensionMimeTypMapping("jpg", "image/jpg");
+    mimeTypeMap.addExtensionMimeTypeMapping("jpg", "image/jpg");
 
     String path = "file/with/natively/supported/extension.jpg";
     assertThat(MediaUtils.extractMime(path)).isEqualTo("image/jpg");
@@ -79,7 +77,7 @@ public class MediaUtilsTest {
   }
 
   @Test
-   public void testIsNonNativeSupportedMimeTypeNative() {
+  public void testIsNonNativeSupportedMimeTypeNative() {
     assertThat(MediaUtils.isNonNativeSupportedMimeType("image/jpg")).isFalse();
   }
 

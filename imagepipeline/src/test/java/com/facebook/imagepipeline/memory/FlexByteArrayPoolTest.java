@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.memory;
@@ -21,9 +19,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link FlexByteArrayPool}
- */
+/** Tests for {@link FlexByteArrayPool} */
 @RunWith(RobolectricTestRunner.class)
 public class FlexByteArrayPoolTest {
 
@@ -35,18 +31,19 @@ public class FlexByteArrayPoolTest {
   @Before
   public void setup() {
     SparseIntArray buckets = new SparseIntArray();
-    for (int i = MIN_BUFFER_SIZE; i <= MAX_BUFFER_SIZE; i*=2) {
+    for (int i = MIN_BUFFER_SIZE; i <= MAX_BUFFER_SIZE; i *= 2) {
       buckets.put(i, 3);
     }
-    mPool = new FlexByteArrayPool(
-        mock(MemoryTrimmableRegistry.class),
-        new PoolParams(
-            Integer.MAX_VALUE,
-            Integer.MAX_VALUE,
-            buckets,
-            MIN_BUFFER_SIZE,
-            MAX_BUFFER_SIZE,
-            1));
+    mPool =
+        new FlexByteArrayPool(
+            mock(MemoryTrimmableRegistry.class),
+            new PoolParams(
+                Integer.MAX_VALUE,
+                Integer.MAX_VALUE,
+                buckets,
+                MIN_BUFFER_SIZE,
+                MAX_BUFFER_SIZE,
+                1));
     mDelegatePool = mPool.mDelegatePool;
   }
 

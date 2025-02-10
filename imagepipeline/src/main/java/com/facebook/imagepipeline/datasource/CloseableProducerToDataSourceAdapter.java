@@ -1,19 +1,20 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.datasource;
 
 import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.DataSource;
-import com.facebook.imagepipeline.listener.RequestListener;
+import com.facebook.imagepipeline.listener.RequestListener2;
 import com.facebook.imagepipeline.producers.Producer;
+import com.facebook.imagepipeline.producers.ProducerContext;
 import com.facebook.imagepipeline.producers.SettableProducerContext;
+import com.facebook.imagepipeline.systrace.FrescoSystrace;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -22,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * @param <T>
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 public class CloseableProducerToDataSourceAdapter<T>
     extends AbstractProducerToDataSourceAdapter<CloseableReference<T>> {
@@ -29,15 +31,22 @@ public class CloseableProducerToDataSourceAdapter<T>
   public static <T> DataSource<CloseableReference<T>> create(
       Producer<CloseableReference<T>> producer,
       SettableProducerContext settableProducerContext,
-      RequestListener listener) {
-    return new CloseableProducerToDataSourceAdapter<T>(
-        producer, settableProducerContext, listener);
+      RequestListener2 listener) {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("CloseableProducerToDataSourceAdapter#create");
+    }
+    CloseableProducerToDataSourceAdapter<T> result =
+        new CloseableProducerToDataSourceAdapter<T>(producer, settableProducerContext, listener);
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
+    }
+    return result;
   }
 
   private CloseableProducerToDataSourceAdapter(
       Producer<CloseableReference<T>> producer,
       SettableProducerContext settableProducerContext,
-      RequestListener listener) {
+      RequestListener2 listener) {
     super(producer, settableProducerContext, listener);
   }
 
@@ -48,12 +57,15 @@ public class CloseableProducerToDataSourceAdapter<T>
   }
 
   @Override
+  // NULLSAFE_FIXME[Inconsistent Subclass Parameter Annotation]
   protected void closeResult(CloseableReference<T> result) {
     CloseableReference.closeSafely(result);
   }
 
   @Override
-  protected void onNewResultImpl(CloseableReference<T> result, int status) {
-    super.onNewResultImpl(CloseableReference.cloneOrNull(result), status);
+  // NULLSAFE_FIXME[Inconsistent Subclass Parameter Annotation]
+  protected void onNewResultImpl(
+      CloseableReference<T> result, int status, ProducerContext producerContext) {
+    super.onNewResultImpl(CloseableReference.cloneOrNull(result), status, producerContext);
   }
 }

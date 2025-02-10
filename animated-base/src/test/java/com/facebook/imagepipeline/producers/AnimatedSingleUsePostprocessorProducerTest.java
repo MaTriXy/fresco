@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
@@ -37,7 +35,7 @@ import org.robolectric.*;
 import org.robolectric.annotation.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest= Config.NONE)
+@Config(manifest = Config.NONE)
 public class AnimatedSingleUsePostprocessorProducerTest {
 
   private static final String POSTPROCESSOR_NAME = "postprocessor_name";
@@ -46,7 +44,7 @@ public class AnimatedSingleUsePostprocessorProducerTest {
 
   @Mock public PlatformBitmapFactory mPlatformBitmapFactory;
   @Mock public ProducerContext mProducerContext;
-  @Mock public ProducerListener mProducerListener;
+  @Mock public ProducerListener2 mProducerListener;
   @Mock public Producer<CloseableReference<CloseableImage>> mInputProducer;
   @Mock public Consumer<CloseableReference<CloseableImage>> mConsumer;
   @Mock public Postprocessor mPostprocessor;
@@ -71,36 +69,34 @@ public class AnimatedSingleUsePostprocessorProducerTest {
     MockitoAnnotations.initMocks(this);
     mTestExecutorService = new TestExecutorService(new FakeClock());
     mPostprocessorProducer =
-        new PostprocessorProducer(
-            mInputProducer,
-            mPlatformBitmapFactory,
-            mTestExecutorService);
+        new PostprocessorProducer(mInputProducer, mPlatformBitmapFactory, mTestExecutorService);
 
     when(mImageRequest.getPostprocessor()).thenReturn(mPostprocessor);
     when(mProducerContext.getId()).thenReturn(mRequestId);
-    when(mProducerContext.getListener()).thenReturn(mProducerListener);
+    when(mProducerContext.getProducerListener()).thenReturn(mProducerListener);
     when(mProducerContext.getImageRequest()).thenReturn(mImageRequest);
 
     mResults = new ArrayList<>();
     when(mPostprocessor.getName()).thenReturn(POSTPROCESSOR_NAME);
-    when(mProducerListener.requiresExtraMap(mRequestId)).thenReturn(true);
+    when(mProducerListener.requiresExtraMap(eq(mProducerContext), eq(POSTPROCESSOR_NAME)))
+        .thenReturn(true);
     doAnswer(
-        new Answer<Object>() {
-          @Override
-          public Object answer(InvocationOnMock invocation) throws Throwable {
-            mResults.add(
-                ((CloseableReference<CloseableImage>) invocation.getArguments()[0]).clone());
-            return null;
-          }
-        }
-    ).when(mConsumer).onNewResult(any(CloseableReference.class), anyInt());
+            new Answer<Object>() {
+              @Override
+              public Object answer(InvocationOnMock invocation) throws Throwable {
+                mResults.add(
+                    ((CloseableReference<CloseableImage>) invocation.getArguments()[0]).clone());
+                return null;
+              }
+            })
+        .when(mConsumer)
+        .onNewResult(any(CloseableReference.class), anyInt());
     mInOrder = inOrder(mPostprocessor, mProducerListener, mConsumer);
 
     mSourceBitmap = mock(Bitmap.class);
     mSourceCloseableStaticBitmap = mock(CloseableStaticBitmap.class);
     when(mSourceCloseableStaticBitmap.getUnderlyingBitmap()).thenReturn(mSourceBitmap);
-    mSourceCloseableImageRef =
-        CloseableReference.<CloseableImage>of(mSourceCloseableStaticBitmap);
+    mSourceCloseableImageRef = CloseableReference.<CloseableImage>of(mSourceCloseableStaticBitmap);
     mDestinationBitmap = mock(Bitmap.class);
     mDestinationCloseableBitmapRef =
         CloseableReference.of(mDestinationBitmap, mBitmapResourceReleaser);

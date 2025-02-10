@@ -1,35 +1,41 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.imagepipeline;
 
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
+import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
+import androidx.annotation.Nullable;
 import com.facebook.common.executors.UiThreadImmediateExecutorService;
 import com.facebook.datasource.BaseDataSubscriber;
 import com.facebook.datasource.DataSource;
 import com.facebook.drawee.backends.pipeline.Fresco;
-import com.facebook.drawee.view.SimpleDraweeView;
+import com.facebook.drawee.backends.pipeline.info.ImageOriginUtils;
+import com.facebook.drawee.drawable.ScalingUtils;
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment;
 import com.facebook.fresco.samples.showcase.R;
-import com.facebook.fresco.samples.showcase.misc.ImageUriProvider;
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider.ImageSize;
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider.Orientation;
+import com.facebook.fresco.vito.listener.BaseImageListener;
+import com.facebook.fresco.vito.listener.ImageListener;
+import com.facebook.fresco.vito.options.ImageOptions;
+import com.facebook.fresco.vito.view.VitoView;
+import com.facebook.imagepipeline.image.ImageInfo;
 import com.facebook.imagepipeline.request.ImageRequest;
+import java.util.Locale;
 
 /**
  * Fragment that illustrates how to prefetch images to disk cache so that they load faster when
@@ -37,16 +43,44 @@ import com.facebook.imagepipeline.request.ImageRequest;
  */
 public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
 
+  private static final ImageOptions IMAGE_OPTIONS =
+      ImageOptions.create()
+          .placeholderRes(R.mipmap.ic_launcher, ScalingUtils.ScaleType.FIT_CENTER)
+          .scale(ScalingUtils.ScaleType.CENTER_CROP)
+          .build();
+
   private Uri[] mUris;
 
-  private Button mPrefetchButton;
+  private Button mPrefetchDiskButton;
+  private Button mPrefetchEncodedButton;
+  private Button mPrefetchBitmapButton;
   private TextView mPrefetchStatus;
-  private ViewGroup mDraweesHolder;
+  private ViewGroup mImagesHolder;
+  private final Handler mHandler = new Handler();
 
-  @Override
-  public int getTitleId() {
-    return R.string.imagepipeline_prefetch_title;
-  }
+  private final ImageListener mImageOriginListener =
+      new BaseImageListener() {
+
+        @Override
+        public void onFinalImageSet(
+            long id, int imageOrigin, @Nullable ImageInfo imageInfo, @Nullable Drawable drawable) {
+          mHandler.post(
+              new Runnable() {
+                @Override
+                public void run() {
+                  Toast.makeText(
+                          getContext(),
+                          String.format(
+                              (Locale) null,
+                              "Image loaded: controllerId=%s, origin=%s",
+                              id,
+                              ImageOriginUtils.toString(imageOrigin)),
+                          Toast.LENGTH_SHORT)
+                      .show();
+                }
+              });
+        }
+      };
 
   private class PrefetchSubscriber extends BaseDataSubscriber<Void> {
 
@@ -67,7 +101,9 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
 
     private void updateDisplay() {
       if (mSuccessful + mFailed == mUris.length) {
-        mPrefetchButton.setEnabled(true);
+        mPrefetchDiskButton.setEnabled(true);
+        mPrefetchEncodedButton.setEnabled(true);
+        mPrefetchBitmapButton.setEnabled(true);
       }
       mPrefetchStatus.setText(
           getString(R.string.prefetch_status, mSuccessful, mUris.length, mFailed));
@@ -80,9 +116,7 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
 
   @Override
   public @Nullable View onCreateView(
-      LayoutInflater inflater,
-      @Nullable ViewGroup container,
-      @Nullable Bundle savedInstanceState) {
+      LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
     return inflater.inflate(R.layout.fragment_imagepipeline_prefetch, container, false);
   }
 
@@ -90,54 +124,94 @@ public class ImagePipelinePrefetchFragment extends BaseShowcaseFragment {
   public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
     super.onViewCreated(view, savedInstanceState);
 
-    final ImageUriProvider imageUriProvider = ImageUriProvider.getInstance(getContext());
-    mUris = new Uri[] {
-        imageUriProvider.createSampleUri(ImageSize.L, Orientation.LANDSCAPE),
-        imageUriProvider.createSampleUri(ImageSize.L, Orientation.PORTRAIT),
-    };
+    mUris =
+        new Uri[] {
+          sampleUris().createSampleUri(ImageSize.L, Orientation.LANDSCAPE),
+          sampleUris().createSampleUri(ImageSize.L, Orientation.PORTRAIT),
+        };
 
     final Button clearCacheButton = (Button) view.findViewById(R.id.clear_cache);
-    clearCacheButton.setOnClickListener(new View.OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        for (Uri uri : mUris) {
-          Fresco.getImagePipeline().evictFromCache(uri);
-        }
-      }
-    });
+    clearCacheButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            for (Uri uri : mUris) {
+              Fresco.getImagePipeline().evictFromCache(uri);
+            }
+          }
+        });
 
     mPrefetchStatus = (TextView) view.findViewById(R.id.prefetch_status);
-    mPrefetchButton = (Button) view.findViewById(R.id.prefetch_now);
-    mPrefetchButton.setOnClickListener(new View.OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        mPrefetchButton.setEnabled(false);
-        final PrefetchSubscriber subscriber = new PrefetchSubscriber();
-        for (Uri uri : mUris) {
-          final DataSource<Void> ds =
-              Fresco.getImagePipeline().prefetchToDiskCache(ImageRequest.fromUri(uri), null);
-          ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
-        }
-      }
-    });
+    mPrefetchDiskButton = (Button) view.findViewById(R.id.prefetch_disk_now);
+    mPrefetchDiskButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            mPrefetchDiskButton.setEnabled(false);
+            final PrefetchSubscriber subscriber = new PrefetchSubscriber();
+            for (Uri uri : mUris) {
+              final DataSource<Void> ds =
+                  Fresco.getImagePipeline().prefetchToDiskCache(ImageRequest.fromUri(uri), null);
+              ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
+            }
+          }
+        });
 
-    mDraweesHolder = (ViewGroup) view.findViewById(R.id.drawees);
+    mPrefetchEncodedButton = (Button) view.findViewById(R.id.prefetch_encoded_now);
+    mPrefetchEncodedButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            mPrefetchEncodedButton.setEnabled(false);
+            final PrefetchSubscriber subscriber = new PrefetchSubscriber();
+            for (Uri uri : mUris) {
+              final DataSource<Void> ds =
+                  Fresco.getImagePipeline().prefetchToEncodedCache(ImageRequest.fromUri(uri), null);
+              ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
+            }
+          }
+        });
+
+    mPrefetchBitmapButton = (Button) view.findViewById(R.id.prefetch_bitmap_now);
+    mPrefetchBitmapButton.setOnClickListener(
+        new View.OnClickListener() {
+          @Override
+          public void onClick(View v) {
+            mPrefetchBitmapButton.setEnabled(false);
+            final PrefetchSubscriber subscriber = new PrefetchSubscriber();
+            for (Uri uri : mUris) {
+              final DataSource<Void> ds =
+                  Fresco.getImagePipeline().prefetchToBitmapCache(ImageRequest.fromUri(uri), null);
+              ds.subscribe(subscriber, UiThreadImmediateExecutorService.getInstance());
+            }
+          }
+        });
+
+    mImagesHolder = (ViewGroup) view.findViewById(R.id.images);
     Button toggleImages = (Button) view.findViewById(R.id.toggle_images);
-    toggleImages.setOnClickListener(new View.OnClickListener() {
-      private boolean mShowing = false;
-      @Override
-      public void onClick(View v) {
-        if (!mShowing) {
-          for (int i = 0; i < mDraweesHolder.getChildCount(); i++) {
-            ((SimpleDraweeView) mDraweesHolder.getChildAt(i)).setImageURI(mUris[i]);
+    toggleImages.setOnClickListener(
+        new View.OnClickListener() {
+          private boolean mShowing = false;
+
+          @Override
+          public void onClick(View v) {
+            if (!mShowing) {
+              for (int i = 0; i < mImagesHolder.getChildCount(); i++) {
+                ImageView imageView = (ImageView) mImagesHolder.getChildAt(i);
+                VitoView.show(
+                    mUris[i],
+                    IMAGE_OPTIONS,
+                    "ImagePipelinePrefetchFragment",
+                    mImageOriginListener,
+                    imageView);
+              }
+            } else {
+              for (int i = 0; i < mImagesHolder.getChildCount(); i++) {
+                VitoView.release(mImagesHolder.getChildAt(i));
+              }
+            }
+            mShowing = !mShowing;
           }
-        } else {
-          for (int i = 0; i < mDraweesHolder.getChildCount(); i++) {
-            ((SimpleDraweeView) mDraweesHolder.getChildAt(i)).setController(null);
-          }
-        }
-        mShowing = !mShowing;
-      }
-    });
+        });
   }
 }

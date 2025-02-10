@@ -1,15 +1,14 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.executors;
 
 import android.os.Handler;
+import android.os.Looper;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Assert;
@@ -19,22 +18,25 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowLooper;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest= Config.NONE)
+@Config(manifest = Config.NONE)
+@LooperMode(LooperMode.Mode.LEGACY) // Required for pausing and unpausing the looper
 public class HandlerExecutorServiceImplTest {
 
   private AtomicInteger mCounter = new AtomicInteger();
 
   private HandlerExecutorServiceImpl mExecutorService;
 
-  Runnable mIncrementCounterRunnable = new Runnable() {
-    @Override
-    public void run() {
-      mCounter.incrementAndGet();
-    }
-  };
+  Runnable mIncrementCounterRunnable =
+      new Runnable() {
+        @Override
+        public void run() {
+          mCounter.incrementAndGet();
+        }
+      };
 
   @Before
   public void setup() {
@@ -55,7 +57,7 @@ public class HandlerExecutorServiceImplTest {
   public void testDelay() {
     mExecutorService.schedule(mIncrementCounterRunnable, 30, TimeUnit.SECONDS);
     Assert.assertEquals(0, mCounter.get());
-    Shadows.shadowOf(ShadowLooper.getMainLooper()).getScheduler().advanceBy(30 * 1000);
+    Shadows.shadowOf(Looper.getMainLooper()).getScheduler().advanceBy(30 * 1000);
     Assert.assertEquals(1, mCounter.get());
   }
 }

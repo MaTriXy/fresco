@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.statfs;
@@ -30,16 +28,13 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.rule.PowerMockRule;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link StatFsHelper}.
- */
+/** Tests for {@link StatFsHelper}. */
 @RunWith(RobolectricTestRunner.class)
 @PrepareForTest({Environment.class, StatFsHelper.class, SystemClock.class})
 @Ignore("t6344387")
 public class StatFsHelperTest {
 
-  @Rule
-  public PowerMockRule rule = new PowerMockRule();
+  @Rule public PowerMockRule rule = new PowerMockRule();
 
   private File mMockFileInternal;
   private File mMockFileExternal;
@@ -142,8 +137,7 @@ public class StatFsHelperTest {
     statFsHelper.resetStats();
   }
 
-
-    @Test
+  @Test
   public void testShouldHandleExceptionOnExternalCacheCreate() {
 
     expectInternalSetup();

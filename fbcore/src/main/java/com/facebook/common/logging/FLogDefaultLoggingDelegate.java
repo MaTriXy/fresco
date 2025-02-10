@@ -1,21 +1,17 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.logging;
 
 import android.util.Log;
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import com.facebook.infer.annotation.Nullsafe;
 
-/**
- * Default implementation of {@link LoggingDelegate}.
- */
+/** Default implementation of {@link LoggingDelegate}. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class FLogDefaultLoggingDelegate implements LoggingDelegate {
 
   public static final FLogDefaultLoggingDelegate sInstance = new FLogDefaultLoggingDelegate();
@@ -27,19 +23,17 @@ public class FLogDefaultLoggingDelegate implements LoggingDelegate {
     return sInstance;
   }
 
-  private FLogDefaultLoggingDelegate() {
-  }
+  private FLogDefaultLoggingDelegate() {}
 
   /**
-   * Sets an application tag that is used for checking if a log line is loggable and also
-   * to prefix to all log lines.
+   * Sets an application tag that is used for checking if a log line is loggable and also to prefix
+   * to all log lines.
    *
    * @param tag the tag
    */
   public void setApplicationTag(String tag) {
     mApplicationTag = tag;
   }
-
 
   @Override
   public void setMinimumLoggingLevel(int level) {
@@ -107,8 +101,8 @@ public class FLogDefaultLoggingDelegate implements LoggingDelegate {
   }
 
   /**
-   * <p> Note: this gets forwarded to {@code android.util.Log.e} as {@code android.util.Log.wtf}
-   * might crash the app.
+   * Note: this gets forwarded to {@code android.util.Log.e} as {@code android.util.Log.wtf} might
+   * crash the app.
    */
   @Override
   public void wtf(String tag, String msg) {
@@ -116,8 +110,8 @@ public class FLogDefaultLoggingDelegate implements LoggingDelegate {
   }
 
   /**
-   * <p> Note: this gets forwarded to {@code android.util.Log.e} as {@code android.util.Log.wtf}
-   * might crash the app.
+   * Note: this gets forwarded to {@code android.util.Log.e} as {@code android.util.Log.wtf} might
+   * crash the app.
    */
   @Override
   public void wtf(String tag, String msg, Throwable tr) {
@@ -153,9 +147,6 @@ public class FLogDefaultLoggingDelegate implements LoggingDelegate {
     if (tr == null) {
       return "";
     }
-    StringWriter sw = new StringWriter();
-    PrintWriter pw = new PrintWriter(sw);
-    tr.printStackTrace(pw);
-    return sw.toString();
+    return Log.getStackTraceString(tr);
   }
 }

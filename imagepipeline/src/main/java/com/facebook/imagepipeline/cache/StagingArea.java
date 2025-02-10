@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.cache;
@@ -15,17 +13,20 @@ import com.facebook.common.logging.FLog;
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
  * This is class encapsulates Map that maps ImageCacheKeys to EncodedImages pointing to
- * PooledByteBuffers. It is used by SimpleImageCache to store values that are being written
- * to disk cache, so that they can be returned by parallel cache get operations.
+ * PooledByteBuffers. It is used by SimpleImageCache to store values that are being written to disk
+ * cache, so that they can be returned by parallel cache get operations.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class StagingArea {
   private static final Class<?> TAG = StagingArea.class;
 
@@ -41,8 +42,8 @@ public class StagingArea {
   }
 
   /**
-   * Stores key-value in this StagingArea. This call overrides previous value
-   * of stored reference if
+   * Stores key-value in this StagingArea. This call overrides previous value of stored reference if
+   *
    * @param key
    * @param encodedImage EncodedImage to be associated with key
    */
@@ -56,9 +57,7 @@ public class StagingArea {
     logStats();
   }
 
-  /**
-   * Removes all items from the StagingArea.
-   */
+  /** Removes all items from the StagingArea. */
   public void clearAll() {
     final List<EncodedImage> old;
     synchronized (this) {
@@ -75,6 +74,7 @@ public class StagingArea {
 
   /**
    * Removes item from the StagingArea.
+   *
    * @param key
    * @return true if item was removed
    */
@@ -96,6 +96,7 @@ public class StagingArea {
 
   /**
    * Removes key-value from the StagingArea. Both key and value must match.
+   *
    * @param key
    * @param encodedImage value corresponding to key
    * @return true if item was removed
@@ -132,7 +133,7 @@ public class StagingArea {
    * @param key
    * @return value associated with given key or null if no value is associated
    */
-  public synchronized EncodedImage get(final CacheKey key) {
+  public synchronized @Nullable EncodedImage get(final CacheKey key) {
     Preconditions.checkNotNull(key);
     EncodedImage storedEncodedImage = mMap.get(key);
     if (storedEncodedImage != null) {
@@ -156,9 +157,7 @@ public class StagingArea {
     return storedEncodedImage;
   }
 
-  /**
-   * Determine if an valid entry for the key exists in the staging area.
-   */
+  /** Determine if an valid entry for the key exists in the staging area. */
   public synchronized boolean containsKey(CacheKey key) {
     Preconditions.checkNotNull(key);
     if (!mMap.containsKey(key)) {
@@ -183,11 +182,8 @@ public class StagingArea {
     }
   }
 
-  /**
-   * Simple 'debug' logging of stats.
-   */
+  /** Simple 'debug' logging of stats. */
   private synchronized void logStats() {
     FLog.v(TAG, "Count = %d", mMap.size());
   }
-
 }

@@ -1,21 +1,15 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.imagepipeline;
 
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,24 +17,27 @@ import android.view.ViewTreeObserver;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import com.facebook.drawee.backends.pipeline.Fresco;
-import com.facebook.drawee.interfaces.DraweeController;
-import com.facebook.drawee.view.SimpleDraweeView;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import com.facebook.drawee.drawable.ScalingUtils;
 import com.facebook.fresco.samples.showcase.BaseShowcaseFragment;
 import com.facebook.fresco.samples.showcase.R;
 import com.facebook.fresco.samples.showcase.imagepipeline.widget.ResizableFrameLayout;
 import com.facebook.fresco.samples.showcase.misc.ImageUriProvider;
+import com.facebook.fresco.vito.options.ImageOptions;
+import com.facebook.fresco.vito.view.VitoView;
 import com.facebook.imagepipeline.common.ResizeOptions;
-import com.facebook.imagepipeline.request.ImageRequest;
-import com.facebook.imagepipeline.request.ImageRequestBuilder;
 
 /**
  * Fragment that illustrates how to use the image pipeline directly in order to create
  * notifications.
  */
 public class ImagePipelineResizingFragment extends BaseShowcaseFragment {
+
+  private static final String CALLER_CONTEXT = "ImagePipelineResizingFragment";
 
   private final SizeEntry[] SPINNER_ENTRIES_SIZE =
       new SizeEntry[] {
@@ -63,28 +60,25 @@ public class ImagePipelineResizingFragment extends BaseShowcaseFragment {
   private ImageFormatEntry[] mImageFormatEntries;
 
   private Button mButton;
-  private SimpleDraweeView mDraweeMain;
+  private ImageView mImage;
   private Spinner mSizeSpinner;
   private Spinner mFormatSpinner;
 
   @Nullable
   @Override
   public View onCreateView(
-      LayoutInflater inflater,
-      @Nullable ViewGroup container,
-      @Nullable Bundle savedInstanceState) {
+      LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
     return inflater.inflate(R.layout.fragment_imagepipeline_resizing, container, false);
   }
 
   @Override
   public void onViewCreated(final View view, @Nullable Bundle savedInstanceState) {
-    final ImageUriProvider imageUriProvider = ImageUriProvider.getInstance(getContext());
-    setupImageFormatEntries(imageUriProvider);
+    setupImageFormatEntries(sampleUris());
 
-    mButton = (Button) view.findViewById(R.id.button);
-    mDraweeMain = (SimpleDraweeView) view.findViewById(R.id.drawee_view);
-    mSizeSpinner = (Spinner) view.findViewById(R.id.spinner_size);
-    mFormatSpinner = (Spinner) view.findViewById(R.id.spinner_format);
+    mButton = view.findViewById(R.id.button);
+    mImage = view.findViewById(R.id.image);
+    mSizeSpinner = view.findViewById(R.id.spinner_size);
+    mFormatSpinner = view.findViewById(R.id.spinner_format);
 
     mSizeSpinner.setAdapter(new SimpleResizeOptionsAdapter());
     mSizeSpinner.setOnItemSelectedListener(
@@ -112,7 +106,7 @@ public class ImagePipelineResizingFragment extends BaseShowcaseFragment {
         });
     mFormatSpinner.setSelection(0);
 
-    mDraweeMain.setOnClickListener(
+    mImage.setOnClickListener(
         new View.OnClickListener() {
           @Override
           public void onClick(View v) {
@@ -165,11 +159,6 @@ public class ImagePipelineResizingFragment extends BaseShowcaseFragment {
         };
   }
 
-  @Override
-  public int getTitleId() {
-    return R.string.imagepipeline_resizing_title;
-  }
-
   private void reloadImage() {
     reloadImage(
         mImageFormatEntries[mFormatSpinner.getSelectedItemPosition()].uri,
@@ -177,15 +166,16 @@ public class ImagePipelineResizingFragment extends BaseShowcaseFragment {
   }
 
   private void reloadImage(Uri imageUri, @Nullable ResizeOptions resizeOptions) {
-    final ImageRequest imageRequest =
-        ImageRequestBuilder.newBuilderWithSource(imageUri).setResizeOptions(resizeOptions).build();
-
-    final DraweeController draweeController = Fresco.newDraweeControllerBuilder()
-        .setOldController(mDraweeMain.getController())
-        .setImageRequest(imageRequest)
-        .build();
-
-    mDraweeMain.setController(draweeController);
+    VitoView.show(
+        imageUri,
+        ImageOptions.create()
+            .resize(resizeOptions)
+            .overlayRes(R.drawable.resize_outline)
+            .scale(ScalingUtils.ScaleType.CENTER_CROP)
+            .errorRes(R.color.primaryDark)
+            .build(),
+        CALLER_CONTEXT,
+        mImage);
   }
 
   private class SimpleResizeOptionsAdapter extends BaseAdapter {
@@ -209,9 +199,11 @@ public class ImagePipelineResizingFragment extends BaseShowcaseFragment {
     public View getView(int position, View convertView, ViewGroup parent) {
       final LayoutInflater layoutInflater = getLayoutInflater();
 
-      final View view = convertView != null
-          ? convertView
-          : layoutInflater.inflate(android.R.layout.simple_spinner_dropdown_item, parent, false);
+      final View view =
+          convertView != null
+              ? convertView
+              : layoutInflater.inflate(
+                  android.R.layout.simple_spinner_dropdown_item, parent, false);
 
       final TextView textView = (TextView) view.findViewById(android.R.id.text1);
       textView.setText(SPINNER_ENTRIES_SIZE[position].toString());

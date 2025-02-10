@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.view;
@@ -24,9 +22,11 @@ import org.junit.runner.RunWith;
 import org.mockito.InOrder;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 /** Unit test for {@link DraweeView}. */
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = 21)
 public class DraweeViewTest {
 
   private DraweeView<DraweeHierarchy> mDraweeView;
@@ -80,7 +80,7 @@ public class DraweeViewTest {
   public void testClearControllerKeepsHierarchy() {
     mDraweeView.setHierarchy(mDraweeHierarchy);
     mDraweeView.setController(mController);
-    mDraweeView.setController(null);
+    mDraweeView.resetActualImage();
     assertNull(mDraweeView.getController());
     assertSame(mTopLevelDrawable, mDraweeView.getDrawable());
     verify(mController).setHierarchy(null);
@@ -156,7 +156,7 @@ public class DraweeViewTest {
   @Test
   public void testLifecycle_NullController() {
     mDraweeView.setHierarchy(mDraweeHierarchy);
-    mDraweeView.setController(null);
+    mDraweeView.resetActualImage();
     mDraweeView.onStartTemporaryDetach();
     mDraweeView.onFinishTemporaryDetach();
   }

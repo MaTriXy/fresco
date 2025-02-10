@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.util;
@@ -26,15 +24,11 @@ import org.junit.runner.RunWith;
 import org.mockito.InOrder;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link StreamUtil}
- */
+/** Tests for {@link StreamUtil} */
 @RunWith(RobolectricTestRunner.class)
 public class StreamUtilTest {
 
-  /**
-   * Verify that using a ByteArrayInputStream does not allocate a new byte array.
-   */
+  /** Verify that using a ByteArrayInputStream does not allocate a new byte array. */
   @Test
   public void testByteArrayInputStream() throws Exception {
     byte[] bytes = new byte[8];
@@ -47,9 +41,7 @@ public class StreamUtilTest {
     }
   }
 
-  /**
-   * Verify that using an offset with ByteArrayInputStream still produces correct output.
-   */
+  /** Verify that using an offset with ByteArrayInputStream still produces correct output. */
   @Test
   public void testByteArrayInputStreamWithOffset() throws Exception {
     byte[] bytes = new byte[] {0, 1, 2, 3, 4};
@@ -63,9 +55,7 @@ public class StreamUtilTest {
     }
   }
 
-  /**
-   * Verify getting a byte array from a FileInputStream.
-   */
+  /** Verify getting a byte array from a FileInputStream. */
   @Test
   public void testFileInputStream() throws Exception {
     checkFileInputStream(4);
@@ -105,8 +95,8 @@ public class StreamUtilTest {
 
   private void checkFileInputStream(int size) throws IOException {
     byte[] bytesToWrite = new byte[size];
-    for (int i=0; i<size; i++) {
-      bytesToWrite[i] = (byte)i; // It's okay to truncate
+    for (int i = 0; i < size; i++) {
+      bytesToWrite[i] = (byte) i; // It's okay to truncate
     }
 
     File tmpFile = File.createTempFile("streamUtil", "test");
@@ -126,5 +116,4 @@ public class StreamUtilTest {
       assertTrue(tmpFile.delete());
     }
   }
-
 }

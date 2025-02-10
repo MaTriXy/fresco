@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.datasource;
@@ -17,9 +15,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for IncreasingQualityDataSourceSupplier
- */
+/** Tests for IncreasingQualityDataSourceSupplier */
 @RunWith(RobolectricTestRunner.class)
 public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceSupplier {
 
@@ -29,9 +25,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     mDataSourceSupplier = IncreasingQualityDataSourceSupplier.create(mSuppliers);
   }
 
-  /**
-   * All data sources failed, highest-quality failed last, no intermediate results.
-   */
+  /** All data sources failed, highest-quality failed last, no intermediate results. */
   @Test
   public void testLifecycle_F2_F3_F1_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -62,9 +56,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, FAILED, throwable);
   }
 
-  /**
-   * Highest-quality data source failed second, result of the third data source is ignored.
-   */
+  /** Highest-quality data source failed second, result of the third data source is ignored. */
   @Test
   public void testLifecycle_F2_F1_S3_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -100,8 +92,8 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
   }
 
   /**
-   * Highest-quality data source failed, result of the third data source is ignored.
-   * Second data source produced intermediate result first, the result is preserved until closed.
+   * Highest-quality data source failed, result of the third data source is ignored. Second data
+   * source produced intermediate result first, the result is preserved until closed.
    */
   @Test
   public void testLifecycle_I2_F2_F1_S3_C() {
@@ -197,9 +189,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Interleaved results.
-   */
+  /** Interleaved results. */
   @Test
   public void testLifecycle_I3_I2_I3_S2_I1_S1_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -251,9 +241,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Second data source produced its final result, followed by the first data source.
-   */
+  /** Second data source produced its final result, followed by the first data source. */
   @Test
   public void testLifecycle_S2_S1_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -279,9 +267,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Highest-quality data source was first to produce result, other data sources got closed.
-   */
+  /** Highest-quality data source was first to produce result, other data sources got closed. */
   @Test
   public void testLifecycle_I1_S1_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -307,9 +293,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Highest-quality data source was first to produce result, other data sources got closed.
-   */
+  /** Highest-quality data source was first to produce result, other data sources got closed. */
   @Test
   public void testLifecycle_S1_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -329,9 +313,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Early close with intermediate result.
-   */
+  /** Early close with intermediate result. */
   @Test
   public void testLifecycle_I2_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -351,9 +333,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, NOT_FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Early close with no results.
-   */
+  /** Early close with no results. */
   @Test
   public void testLifecycle_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -366,9 +346,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, NOT_FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Ignore callbacks after closed.
-   */
+  /** Ignore callbacks after closed. */
   @Test
   public void testLifecycle_I2_C_S1() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -394,9 +372,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, NOT_FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Test data source without result
-   */
+  /** Test data source without result */
   @Test
   public void testLifecycle_WithoutResult_NI2_NS2_I3_S3_S1_C() {
     DataSource<Object> dataSource = getAndSubscribe();
@@ -473,9 +449,7 @@ public class IncreasingQualityDataSourceSupplierTest extends AbstractDataSourceS
     verifyState(dataSource, null, CLOSED, FINISHED, WITHOUT_RESULT, null, NOT_FAILED, null);
   }
 
-  /**
-   * Immediate finish of the first data source.
-   */
+  /** Immediate finish of the first data source. */
   @Test
   public void testLifecycle_ImmediateFinish() {
     Object val = mock(Object.class);

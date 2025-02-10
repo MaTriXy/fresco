@@ -1,19 +1,17 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.logging;
 
 import android.util.Log;
+import com.facebook.infer.annotation.Nullsafe;
 
-/**
- * Logging wrapper with format style support.
- */
+/** Logging wrapper with format style support. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class FLog {
 
   public static final int VERBOSE = Log.VERBOSE;
@@ -108,8 +106,8 @@ public class FLog {
     }
   }
 
-  public static void v(Class<?> cls, String msg, Object arg1, Object arg2, Object arg3,
-      Object arg4) {
+  public static void v(
+      Class<?> cls, String msg, Object arg1, Object arg2, Object arg3, Object arg4) {
     if (sHandler.isLoggable(VERBOSE)) {
       sHandler.v(getTag(cls), formatString(msg, arg1, arg2, arg3, arg4));
     }
@@ -205,8 +203,8 @@ public class FLog {
     }
   }
 
-  public static void d(Class<?> cls, String msg, Object arg1, Object arg2, Object arg3,
-      Object arg4) {
+  public static void d(
+      Class<?> cls, String msg, Object arg1, Object arg2, Object arg3, Object arg4) {
     if (sHandler.isLoggable(DEBUG)) {
       sHandler.d(getTag(cls), formatString(msg, arg1, arg2, arg3, arg4));
     }
@@ -302,8 +300,8 @@ public class FLog {
     }
   }
 
-  public static void i(Class<?> cls, String msg, Object arg1, Object arg2, Object arg3,
-      Object arg4) {
+  public static void i(
+      Class<?> cls, String msg, Object arg1, Object arg2, Object arg3, Object arg4) {
     if (sHandler.isLoggable(INFO)) {
       sHandler.i(getTag(cls), formatString(msg, arg1, arg2, arg3, arg4));
     }
@@ -327,7 +325,7 @@ public class FLog {
     }
   }
 
-  public static void i(Class <?> cls, Throwable tr, String msg, Object... args) {
+  public static void i(Class<?> cls, Throwable tr, String msg, Object... args) {
     if (isLoggable(INFO)) {
       sHandler.i(getTag(cls), formatString(msg, args), tr);
     }
@@ -351,7 +349,7 @@ public class FLog {
     }
   }
 
-  public static void w(Class <?> cls, String msg) {
+  public static void w(Class<?> cls, String msg) {
     if (sHandler.isLoggable(WARN)) {
       sHandler.w(getTag(cls), msg);
     }
@@ -387,7 +385,7 @@ public class FLog {
     }
   }
 
-  public static void w(Class <?> cls, String msg, Throwable tr) {
+  public static void w(Class<?> cls, String msg, Throwable tr) {
     if (sHandler.isLoggable(WARN)) {
       sHandler.w(getTag(cls), msg, tr);
     }
@@ -399,7 +397,7 @@ public class FLog {
     }
   }
 
-  public static void e(Class <?> cls, String msg) {
+  public static void e(Class<?> cls, String msg) {
     if (sHandler.isLoggable(ERROR)) {
       sHandler.e(getTag(cls), msg);
     }
@@ -435,7 +433,7 @@ public class FLog {
     }
   }
 
-  public static void e(Class <?> cls, String msg, Throwable tr) {
+  public static void e(Class<?> cls, String msg, Throwable tr) {
     if (sHandler.isLoggable(ERROR)) {
       sHandler.e(getTag(cls), msg, tr);
     }
@@ -447,7 +445,7 @@ public class FLog {
     }
   }
 
-  public static void wtf(Class <?> cls, String msg) {
+  public static void wtf(Class<?> cls, String msg) {
     if (sHandler.isLoggable(ERROR)) {
       sHandler.wtf(getTag(cls), msg);
     }
@@ -465,13 +463,13 @@ public class FLog {
     }
   }
 
-  public static void wtf(Class <?> cls, String msg, Object... args) {
+  public static void wtf(Class<?> cls, String msg, Object... args) {
     if (sHandler.isLoggable(ERROR)) {
       sHandler.wtf(getTag(cls), formatString(msg, args));
     }
   }
 
-  public static void wtf(Class <?> cls, Throwable tr, String msg, Object... args) {
+  public static void wtf(Class<?> cls, Throwable tr, String msg, Object... args) {
     if (sHandler.isLoggable(ERROR)) {
       sHandler.wtf(getTag(cls), formatString(msg, args), tr);
     }
@@ -483,7 +481,7 @@ public class FLog {
     }
   }
 
-  public static void wtf(Class <?> cls, String msg, Throwable tr) {
+  public static void wtf(Class<?> cls, String msg, Throwable tr) {
     if (sHandler.isLoggable(ERROR)) {
       sHandler.wtf(getTag(cls), msg, tr);
     }

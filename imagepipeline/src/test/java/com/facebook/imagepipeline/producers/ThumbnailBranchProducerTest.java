@@ -1,15 +1,13 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
 
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -22,6 +20,7 @@ import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.request.ImageRequest;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -91,8 +90,7 @@ public class ThumbnailBranchProducerTest {
 
     EncodedImage secondImage = mockEncodedImage(THUMBNAIL_WIDTHS[1], THUMBNAIL_HEIGHTS[1], 0);
     mockProducersToProduce(
-        mockEncodedImage(THUMBNAIL_WIDTHS[0] + 50, THUMBNAIL_HEIGHTS[0] + 50, 0),
-        secondImage);
+        mockEncodedImage(THUMBNAIL_WIDTHS[0] + 50, THUMBNAIL_HEIGHTS[0] + 50, 0), secondImage);
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
@@ -182,8 +180,7 @@ public class ThumbnailBranchProducerTest {
     EncodedImage secondImage =
         mockEncodedImage(THUMBNAIL_HEIGHTS[1] * 3 / 4, THUMBNAIL_WIDTHS[1] * 3 / 4, 90);
     mockProducersToProduce(
-        mockEncodedImage(THUMBNAIL_WIDTHS[0], THUMBNAIL_HEIGHTS[0], 0),
-        secondImage);
+        mockEncodedImage(THUMBNAIL_WIDTHS[0], THUMBNAIL_HEIGHTS[0], 0), secondImage);
 
     mProducer.produceResults(mImageConsumer, mProducerContext);
 
@@ -220,45 +217,51 @@ public class ThumbnailBranchProducerTest {
   }
 
   private static void mockProducerToSupportSize(
-      ThumbnailProducer<EncodedImage> mockProducer,
-      final int width,
-      final int height) {
-    when(mockProducer.canProvideImageForSize(any(ResizeOptions.class))).then(new Answer<Boolean>() {
-      @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
-        ResizeOptions resizeOptions = (ResizeOptions) invocation.getArguments()[0];
-        return resizeOptions.width <= width && resizeOptions.height <= height;
-      }
-    });
+      ThumbnailProducer<EncodedImage> mockProducer, final int width, final int height) {
+    when(mockProducer.canProvideImageForSize(any(ResizeOptions.class)))
+        .then(
+            new Answer<Boolean>() {
+              @Override
+              public Boolean answer(InvocationOnMock invocation) throws Throwable {
+                ResizeOptions resizeOptions = (ResizeOptions) invocation.getArguments()[0];
+                return resizeOptions.width <= width && resizeOptions.height <= height;
+              }
+            });
   }
 
   private void mockProducersToProduce(final EncodedImage... images) {
     for (int i = 0; i < images.length; i++) {
       final EncodedImage image = images[i];
-      whenProduceResultsCalledTrigger(mThumbnailProducers[i], new ConsumerCallback() {
-        @Override
-        public void callback(Consumer<EncodedImage> consumer) {
-          if (image == THROW_FAILURE) {
-            consumer.onFailure(new IOException("IMAGE FAILED"));
-          } else {
-            consumer.onNewResult(image, Consumer.IS_LAST);
-          }
-        }
-      });
+      whenProduceResultsCalledTrigger(
+          mThumbnailProducers[i],
+          new ConsumerCallback() {
+            @Override
+            public void callback(Consumer<EncodedImage> consumer) {
+              if (image == THROW_FAILURE) {
+                consumer.onFailure(new IOException("IMAGE FAILED"));
+              } else {
+                consumer.onNewResult(image, Consumer.IS_LAST);
+              }
+            }
+          });
     }
   }
 
   private static void whenProduceResultsCalledTrigger(
-      ThumbnailProducer<EncodedImage> mockProducer,
-      final ConsumerCallback callback) {
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        Consumer<EncodedImage> consumer = (Consumer<EncodedImage>) invocation.getArguments()[0];
-        callback.callback(consumer);
-        return null;
-      }
-    }).when(mockProducer).produceResults(any(Consumer.class), any(ProducerContext.class));
+      ThumbnailProducer<EncodedImage> mockProducer, final ConsumerCallback callback) {
+    doAnswer(
+            new Answer<Void>() {
+              @Nullable
+              @Override
+              public Void answer(InvocationOnMock invocation) throws Throwable {
+                Consumer<EncodedImage> consumer =
+                    (Consumer<EncodedImage>) invocation.getArguments()[0];
+                callback.callback(consumer);
+                return null;
+              }
+            })
+        .when(mockProducer)
+        .produceResults(any(Consumer.class), any(ProducerContext.class));
   }
 
   private void verifyAllProducersRequestedForResults() {

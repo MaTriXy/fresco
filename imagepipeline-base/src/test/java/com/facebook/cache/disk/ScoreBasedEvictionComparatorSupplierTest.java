@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.cache.disk;
@@ -20,13 +18,12 @@ import java.util.Random;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.stubbing.Answer;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
-/**
- * Test for the score-based eviction comparator.
- */
+/** Test for the score-based eviction comparator. */
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({System.class})
 public class ScoreBasedEvictionComparatorSupplierTest {
@@ -40,7 +37,7 @@ public class ScoreBasedEvictionComparatorSupplierTest {
     Random random = new Random(RANDOM_SEED);
 
     PowerMockito.mockStatic(System.class);
-    when(System.currentTimeMillis()).thenReturn(0l);
+    when(System.currentTimeMillis()).thenAnswer((Answer<Long>) invocation -> 0L);
 
     entries = new ArrayList<>();
     for (int i = 0; i < 100; i++) {
@@ -83,8 +80,9 @@ public class ScoreBasedEvictionComparatorSupplierTest {
     Collections.sort(entries, supplier.get());
 
     for (int i = 0; i < entries.size() - 1; i++) {
-      assertTrue(supplier.calculateScore(entries.get(i), 0) >
-          supplier.calculateScore(entries.get(i + 1), 0));
+      assertTrue(
+          supplier.calculateScore(entries.get(i), 0)
+              > supplier.calculateScore(entries.get(i + 1), 0));
     }
   }
 }

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.generic;
@@ -133,8 +131,7 @@ public class GenericDraweeHierarchyBuilderTest {
     // test backgrounds & overlays
     builder.setOverlays(Arrays.asList(mOverlayDrawable1, mOverlayDrawable2));
     assertArrayEquals(
-        builder.getOverlays().toArray(),
-        new Drawable[]{mOverlayDrawable1, mOverlayDrawable2});
+        builder.getOverlays().toArray(), new Drawable[] {mOverlayDrawable1, mOverlayDrawable2});
     builder.setBackground(mBackgroundDrawable2);
     builder.setOverlay(mOverlayDrawable2);
     builder.setPressedStateOverlay(mPressedStateDrawable);

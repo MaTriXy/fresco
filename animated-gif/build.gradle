@@ -1,31 +1,47 @@
-apply plugin: 'com.android.library'
-apply plugin: 'maven'
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-project.group = GROUP
-version = VERSION_NAME
+import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
+import com.facebook.fresco.buildsrc.TestDeps
+
+apply plugin: 'com.android.library'
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(11))
+    }
+}
 
 dependencies {
-    provided "com.google.code.findbugs:jsr305:${JSR_305_VERSION}"
-    compile "com.parse.bolts:bolts-tasks:${BOLTS_ANDROID_VERSION}"
-    provided "javax.annotation:javax.annotation-api:${ANNOTATION_API_VERSION}"
-    compile project(':fbcore')
-    compile project(':animated-base')
+    compileOnly Deps.inferAnnotation
+    compileOnly Deps.jsr305
+    implementation Deps.Bolts.tasks
+    compileOnly Deps.javaxAnnotation
+    implementation Deps.SoLoader.nativeloader
+    implementation project(':fbcore')
+    implementation project(':animated-base')
 
-    testCompile project(':imagepipeline-base-test')
-    testCompile project(':imagepipeline-test')
-    testCompile "junit:junit:${JUNIT_VERSION}"
-    testCompile "org.mockito:mockito-core:${MOCKITO_CORE_VERSION}"
-    testCompile("org.powermock:powermock-api-mockito:${POWERMOCK_VERSION}") {
+    testCompileOnly Deps.inferAnnotation
+    testImplementation project(':imagepipeline-base-test')
+    testImplementation project(':imagepipeline-test')
+    testImplementation project(':middleware')
+    testImplementation TestDeps.junit
+    testImplementation TestDeps.mockitoCore
+    testImplementation(TestDeps.Powermock.apiMockito) {
         exclude group: 'org.mockito', module: 'mockito-all'
     }
-    testCompile "org.powermock:powermock-module-junit4-rule:${POWERMOCK_VERSION}"
-    testCompile "org.powermock:powermock-classloading-xstream:${POWERMOCK_VERSION}"
-    testCompile("org.robolectric:robolectric:${ROBOLECTRIC_VERSION}") {
+    testImplementation TestDeps.Powermock.moduleJunit4Rule
+    testImplementation TestDeps.Powermock.classloadingXstream
+    testImplementation(TestDeps.robolectric) {
         exclude group: 'commons-logging', module: 'commons-logging'
         exclude group: 'org.apache.httpcomponents', module: 'httpclient'
     }
 }
-apply from: rootProject.file('release.gradle')
 
 // We download various C++ open-source dependencies from SourceForge into nativedeps/downloads.
 // We then copy both downloaded code and our custom makefiles and headers into nativedeps/merge.
@@ -34,10 +50,19 @@ task fetchNativeDeps(dependsOn: [copyGiflib]) {
 }
 
 android {
+    ndkVersion GradleDeps.Native.version
+
     def ndkLibs = [['gifimage', [copyGiflib]]]
 
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
+
+    namespace "com.facebook.animated.gif"
+
+    defaultConfig {
+        minSdkVersion FrescoConfig.minSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
+    }
 
     sourceSets {
         main {
@@ -46,10 +71,7 @@ android {
         }
     }
     ndkLibs.each { lib -> makeNdkTasks lib[0], lib[1] }
+    preBuild.dependsOn("ndk_build_gifimage")
 }
 
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-artifacts.add('archives', sourcesJar)
+apply plugin: "com.vanniktech.maven.publish"

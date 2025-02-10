@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.animated.util;
@@ -15,15 +13,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link AnimatedDrawableUtil}.
- */
+/** Tests for {@link AnimatedDrawableUtil}. */
 @RunWith(RobolectricTestRunner.class)
 public class AnimatedDrawableUtilTest {
 
   @Test
   public void testGetFrameTimeStampsFromDurations() {
-    int[] frameDurationsMs = new int[] { 30, 30, 60, 30, 30};
+    int[] frameDurationsMs = new int[] {30, 30, 60, 30, 30};
     AnimatedDrawableUtil util = new AnimatedDrawableUtil();
     int[] frameTimestampsMs = util.getFrameTimeStampsFromDurations(frameDurationsMs);
     int[] expected = new int[] {0, 30, 60, 120, 150};
@@ -40,7 +36,7 @@ public class AnimatedDrawableUtilTest {
 
   @Test
   public void testGetFrameForTimestampMs() {
-    int[] frameTimestampsMs = new int[] { 0, 50, 75, 100, 200};
+    int[] frameTimestampsMs = new int[] {0, 50, 75, 100, 200};
     AnimatedDrawableUtil util = new AnimatedDrawableUtil();
     assertEquals(0, util.getFrameForTimestampMs(frameTimestampsMs, 0));
     assertEquals(0, util.getFrameForTimestampMs(frameTimestampsMs, 1));

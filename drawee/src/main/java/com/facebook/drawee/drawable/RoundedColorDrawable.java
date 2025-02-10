@@ -1,15 +1,12 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.drawable;
 
-import android.annotation.TargetApi;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -19,12 +16,13 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
+import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.internal.VisibleForTesting;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.Arrays;
 import javax.annotation.Nullable;
 
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class RoundedColorDrawable extends Drawable implements Rounded {
   private final float[] mRadii = new float[8];
   @VisibleForTesting final float[] mBorderRadii = new float[8];
@@ -35,6 +33,7 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
   private float mPadding = 0;
   private int mBorderColor = Color.TRANSPARENT;
   private boolean mScaleDownInsideBorders = false;
+  private boolean mPaintFilterBitmap = false;
   @VisibleForTesting final Path mPath = new Path();
   @VisibleForTesting final Path mBorderPath = new Path();
   private int mColor = Color.TRANSPARENT;
@@ -52,10 +51,10 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
 
   /**
    * Creates a new instance of RoundedColorDrawable from the given ColorDrawable.
+   *
    * @param colorDrawable color drawable to extract the color from
    * @return a new RoundedColorDrawable
    */
-  @TargetApi(Build.VERSION_CODES.HONEYCOMB)
   public static RoundedColorDrawable fromColorDrawable(ColorDrawable colorDrawable) {
     return new RoundedColorDrawable(colorDrawable.getColor());
   }
@@ -63,8 +62,8 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
   /**
    * Creates a new instance of RoundedColorDrawable.
    *
-   * @param radii Each corner receive two radius values [X, Y]. The corners are ordered
-   *   top-left, top-right, bottom-right, bottom-left.
+   * @param radii Each corner receive two radius values [X, Y]. The corners are ordered top-left,
+   *     top-right, bottom-right, bottom-left.
    * @param color of the drawable
    */
   public RoundedColorDrawable(float[] radii, int color) {
@@ -93,6 +92,7 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
   public void draw(Canvas canvas) {
     mPaint.setColor(DrawableUtils.multiplyColorAlpha(mColor, mAlpha));
     mPaint.setStyle(Paint.Style.FILL);
+    mPaint.setFilterBitmap(getPaintFilterBitmap());
     canvas.drawPath(mPath, mPaint);
     if (mBorderWidth != 0) {
       mPaint.setColor(DrawableUtils.multiplyColorAlpha(mBorderColor, mAlpha));
@@ -123,8 +123,8 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
   /**
    * Sets the rounding radii.
    *
-   * @param radii Each corner receive two radius values [X, Y]. The corners are ordered
-   * top-left, top-right, bottom-right, bottom-left
+   * @param radii Each corner receive two radius values [X, Y]. The corners are ordered top-left,
+   *     top-right, bottom-right, bottom-left
    */
   @Override
   public void setRadii(float[] radii) {
@@ -159,6 +159,7 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
 
   /**
    * Sets the color.
+   *
    * @param color
    */
   public void setColor(int color) {
@@ -170,6 +171,7 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
 
   /**
    * Gets the color.
+   *
    * @return color
    */
   public int getColor() {
@@ -178,6 +180,7 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
 
   /**
    * Sets the border
+   *
    * @param color of the border
    * @param width of the border
    */
@@ -243,6 +246,33 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
   }
 
   /**
+   * Sets FILTER_BITMAP_FLAG flag to Paint. {@link android.graphics.Paint#FILTER_BITMAP_FLAG}
+   *
+   * <p>This should generally be on when drawing bitmaps, unless performance-bound (rendering to
+   * software canvas) or preferring pixelation artifacts to blurriness when scaling significantly.
+   *
+   * @param paintFilterBitmap whether to set FILTER_BITMAP_FLAG flag to Paint.
+   */
+  @Override
+  public void setPaintFilterBitmap(boolean paintFilterBitmap) {
+    if (mPaintFilterBitmap != paintFilterBitmap) {
+      mPaintFilterBitmap = paintFilterBitmap;
+      invalidateSelf();
+    }
+  }
+
+  /** Gets whether to set FILTER_BITMAP_FLAG flag to Paint. */
+  @Override
+  public boolean getPaintFilterBitmap() {
+    return mPaintFilterBitmap;
+  }
+
+  @Override
+  public void setRepeatEdgePixels(boolean repeatEdgePixels) {
+    // no-op
+  }
+
+  /**
    * Sets the drawable's alpha value.
    *
    * @param alpha The alpha value to set, between 0 and 255.
@@ -272,12 +302,11 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
    * @param colorFilter Ignore.
    */
   @Override
-  public void setColorFilter(ColorFilter colorFilter) {
-  }
+  public void setColorFilter(ColorFilter colorFilter) {}
 
   /**
-   * Returns the opacity of the final color which would be used for drawing. This has been
-   * inspired by Android ColorDrawable.
+   * Returns the opacity of the final color which would be used for drawing. This has been inspired
+   * by Android ColorDrawable.
    *
    * @return the opacity
    */
@@ -291,22 +320,22 @@ public class RoundedColorDrawable extends Drawable implements Rounded {
     mBorderPath.reset();
     mTempRect.set(getBounds());
 
-    mTempRect.inset(mBorderWidth/2, mBorderWidth/2);
+    mTempRect.inset(mBorderWidth / 2, mBorderWidth / 2);
     if (mIsCircle) {
-      float radius = Math.min(mTempRect.width(), mTempRect.height())/2;
+      float radius = Math.min(mTempRect.width(), mTempRect.height()) / 2;
       mBorderPath.addCircle(mTempRect.centerX(), mTempRect.centerY(), radius, Path.Direction.CW);
     } else {
       for (int i = 0; i < mBorderRadii.length; i++) {
-        mBorderRadii[i] = mRadii[i] + mPadding - mBorderWidth/2;
+        mBorderRadii[i] = mRadii[i] + mPadding - mBorderWidth / 2;
       }
       mBorderPath.addRoundRect(mTempRect, mBorderRadii, Path.Direction.CW);
     }
-    mTempRect.inset(-mBorderWidth/2, -mBorderWidth/2);
+    mTempRect.inset(-mBorderWidth / 2, -mBorderWidth / 2);
 
     float totalPadding = mPadding + (mScaleDownInsideBorders ? mBorderWidth : 0);
     mTempRect.inset(totalPadding, totalPadding);
     if (mIsCircle) {
-      float radius = Math.min(mTempRect.width(), mTempRect.height())/2;
+      float radius = Math.min(mTempRect.width(), mTempRect.height()) / 2;
       mPath.addCircle(mTempRect.centerX(), mTempRect.centerY(), radius, Path.Direction.CW);
     } else if (mScaleDownInsideBorders) {
       if (mInsideBorderRadii == null) {

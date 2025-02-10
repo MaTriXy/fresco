@@ -1,35 +1,33 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.memory;
 
+import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.internal.VisibleForTesting;
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.InputStream;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * An InputStream implementation over a {@link com.facebook.common.memory.PooledByteBuffer} instance
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @NotThreadSafe
 public class PooledByteBufferInputStream extends InputStream {
 
-  @VisibleForTesting
-  final PooledByteBuffer mPooledByteBuffer;
+  @VisibleForTesting final PooledByteBuffer mPooledByteBuffer;
 
-  @VisibleForTesting
-  int mOffset; // current offset in the chunk
-  @VisibleForTesting
-  int mMark; // position of 'mark' if any
+  @VisibleForTesting int mOffset; // current offset in the chunk
+  @VisibleForTesting int mMark; // position of 'mark' if any
 
   /**
    * Creates a new inputstream instance over the specific buffer.
+   *
    * @param pooledByteBuffer the buffer to read from
    */
   public PooledByteBufferInputStream(PooledByteBuffer pooledByteBuffer) {
@@ -40,18 +38,16 @@ public class PooledByteBufferInputStream extends InputStream {
     mMark = 0;
   }
 
-  /**
-   * Returns the number of bytes still available to read
-   */
+  /** Returns the number of bytes still available to read */
   @Override
   public int available() {
     return mPooledByteBuffer.size() - mOffset;
   }
 
   /**
-   * Sets a mark position in this inputstream.
-   * The parameter {@code readlimit} is ignored.
-   * Sending {@link #reset()}  will reposition the stream back to the marked position.
+   * Sets a mark position in this inputstream. The parameter {@code readlimit} is ignored. Sending
+   * {@link #reset()} will reposition the stream back to the marked position.
+   *
    * @param readlimit ignored.
    */
   @Override
@@ -60,8 +56,7 @@ public class PooledByteBufferInputStream extends InputStream {
   }
 
   /**
-   * Returns {@code true} since this class supports {@link #mark(int)} and {@link #reset()}
-   * methods
+   * Returns {@code true} since this class supports {@link #mark(int)} and {@link #reset()} methods
    */
   @Override
   public boolean markSupported() {
@@ -73,7 +68,7 @@ public class PooledByteBufferInputStream extends InputStream {
     if (available() <= 0) {
       return -1;
     }
-    return ((int) mPooledByteBuffer.read(mOffset++))  & 0xFF;
+    return ((int) mPooledByteBuffer.read(mOffset++)) & 0xFF;
   }
 
   @Override
@@ -82,8 +77,9 @@ public class PooledByteBufferInputStream extends InputStream {
   }
 
   /**
-   * Reads at most {@code length} bytes from this stream and stores them in byte array
-   * {@code buffer} starting at {@code offset}.
+   * Reads at most {@code length} bytes from this stream and stores them in byte array {@code
+   * buffer} starting at {@code offset}.
+   *
    * @param buffer the buffer to read data into
    * @param offset start offset in the buffer
    * @param length max number of bytes to read
@@ -93,9 +89,7 @@ public class PooledByteBufferInputStream extends InputStream {
   public int read(byte[] buffer, int offset, int length) {
     if (offset < 0 || length < 0 || offset + length > buffer.length) {
       throw new ArrayIndexOutOfBoundsException(
-          "length=" + buffer.length +
-          "; regionStart=" + offset +
-          "; regionLength=" + length);
+          "length=" + buffer.length + "; regionStart=" + offset + "; regionLength=" + length);
     }
 
     final int available = available();
@@ -114,9 +108,9 @@ public class PooledByteBufferInputStream extends InputStream {
   }
 
   /**
-   * Resets this stream to the last marked location. This implementation
-   * resets the position to either the marked position, the start position
-   * supplied in the constructor or 0 if neither has been provided.
+   * Resets this stream to the last marked location. This implementation resets the position to
+   * either the marked position, the start position supplied in the constructor or 0 if neither has
+   * been provided.
    */
   @Override
   public void reset() {
@@ -125,6 +119,7 @@ public class PooledByteBufferInputStream extends InputStream {
 
   /**
    * Skips byteCount (or however many bytes are available) bytes in the stream
+   *
    * @param byteCount number of bytes to skip
    * @return number of bytes actually skipped
    */

@@ -1,30 +1,28 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.cache.disk;
 
+import androidx.annotation.VisibleForTesting;
 import com.facebook.binaryresource.BinaryResource;
 import com.facebook.cache.common.CacheErrorLogger;
 import com.facebook.common.file.FileTree;
 import com.facebook.common.file.FileUtils;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
-import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.common.logging.FLog;
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
 import javax.annotation.Nullable;
 
-/**
- * A supplier of a DiskStorage concrete implementation.
- */
+/** A supplier of a DiskStorage concrete implementation. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DynamicDefaultDiskStorage implements DiskStorage {
   private static final Class<?> TAG = DynamicDefaultDiskStorage.class;
 
@@ -33,17 +31,16 @@ public class DynamicDefaultDiskStorage implements DiskStorage {
   private final String mBaseDirectoryName;
   private final CacheErrorLogger mCacheErrorLogger;
 
-  @VisibleForTesting
-  volatile State mCurrentState;
+  @VisibleForTesting volatile State mCurrentState;
 
-  /**
-   * Represents the current 'cached' state.
-   */
-  @VisibleForTesting static class State {
+  /** Represents the current 'cached' state. */
+  @VisibleForTesting
+  static class State {
     public final @Nullable DiskStorage delegate;
     public final @Nullable File rootDirectory;
 
-    @VisibleForTesting State(@Nullable File rootDirectory, @Nullable DiskStorage delegate) {
+    @VisibleForTesting
+    State(@Nullable File rootDirectory, @Nullable DiskStorage delegate) {
       this.delegate = delegate;
       this.rootDirectory = rootDirectory;
     }
@@ -70,7 +67,7 @@ public class DynamicDefaultDiskStorage implements DiskStorage {
     }
   }
 
- @Override
+  @Override
   public boolean isExternal() {
     try {
       return get().isExternal();
@@ -89,7 +86,8 @@ public class DynamicDefaultDiskStorage implements DiskStorage {
   }
 
   @Override
-  public BinaryResource getResource(String resourceId, Object debugInfo) throws IOException {
+  public @Nullable BinaryResource getResource(String resourceId, Object debugInfo)
+      throws IOException {
     return get().getResource(resourceId, debugInfo);
   }
 
@@ -145,8 +143,9 @@ public class DynamicDefaultDiskStorage implements DiskStorage {
   }
 
   /**
-   * Gets a concrete disk-storage instance. If nothing has changed since the last call, then
-   * the last state is returned
+   * Gets a concrete disk-storage instance. If nothing has changed since the last call, then the
+   * last state is returned
+   *
    * @return an instance of the appropriate DiskStorage class
    * @throws IOException
    */
@@ -162,9 +161,9 @@ public class DynamicDefaultDiskStorage implements DiskStorage {
 
   private boolean shouldCreateNewStorage() {
     State currentState = mCurrentState;
-    return (currentState.delegate == null ||
-        currentState.rootDirectory == null ||
-        !currentState.rootDirectory.exists());
+    return (currentState.delegate == null
+        || currentState.rootDirectory == null
+        || !currentState.rootDirectory.exists());
   }
 
   @VisibleForTesting

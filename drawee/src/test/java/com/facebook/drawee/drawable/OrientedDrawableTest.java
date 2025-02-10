@@ -1,16 +1,14 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.drawee.drawable;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -25,9 +23,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link OrientedDrawable}
- */
+/** Tests for {@link OrientedDrawable} */
 @RunWith(RobolectricTestRunner.class)
 public class OrientedDrawableTest {
 
@@ -47,16 +43,6 @@ public class OrientedDrawableTest {
     mBounds.top = 100;
     mBounds.right = 500;
     mBounds.bottom = 500;
-  }
-
-  @Test
-  public void testCreation_invalidAngle() {
-    try {
-      new OrientedDrawable(mDrawable, 20, ExifInterface.ORIENTATION_NORMAL);
-      fail();
-    } catch (IllegalArgumentException e) {
-      // Do nothing, expected.
-    }
   }
 
   @Test
@@ -174,11 +160,11 @@ public class OrientedDrawableTest {
     Matrix inverse = new Matrix();
     rotationMatrix.invert(inverse);
     inverse.mapRect(expectedBounds);
-    verify(mDrawable).setBounds(
-        (int) expectedBounds.left,
-        (int) expectedBounds.top,
-        (int) expectedBounds.right,
-        (int) expectedBounds.bottom);
+    verify(mDrawable)
+        .setBounds(
+            (int) expectedBounds.left,
+            (int) expectedBounds.top,
+            (int) expectedBounds.right,
+            (int) expectedBounds.bottom);
   }
-
 }

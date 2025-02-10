@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.datasource;
@@ -15,6 +13,7 @@ import com.facebook.common.references.CloseableReference;
 import com.facebook.datasource.AbstractDataSource;
 import com.facebook.datasource.DataSource;
 import com.facebook.datasource.DataSubscriber;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
@@ -23,15 +22,17 @@ import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Data source that wraps number of other data sources and waits until all of them are finished.
- * After that each call to getResult() returns list of final results of wrapped data sources.
- * Caller of getResult() is responsible for closing all each of the results separately.
+ * After that each call to getResult() returns list of final results of wrapped data sources. Caller
+ * of getResult() is responsible for closing all each of the results separately.
  *
- * <p> This data source does not propagate intermediate results.
+ * <p>This data source does not propagate intermediate results.
  *
  * @param <T>
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ListDataSource<T> extends AbstractDataSource<List<CloseableReference<T>>> {
   private final DataSource<CloseableReference<T>>[] mDataSources;
+
   @GuardedBy("this")
   private int mFinishedDataSources;
 
@@ -40,16 +41,14 @@ public class ListDataSource<T> extends AbstractDataSource<List<CloseableReferenc
     mFinishedDataSources = 0;
   }
 
-  public static <T> ListDataSource<T> create(
-      DataSource<CloseableReference<T>>... dataSources) {
+  public static <T> ListDataSource<T> create(DataSource<CloseableReference<T>>... dataSources) {
     Preconditions.checkNotNull(dataSources);
     Preconditions.checkState(dataSources.length > 0);
     ListDataSource<T> listDataSource = new ListDataSource<T>(dataSources);
     for (DataSource<CloseableReference<T>> dataSource : dataSources) {
       if (dataSource != null) {
         dataSource.subscribe(
-            listDataSource.new InternalDataSubscriber(),
-            CallerThreadExecutor.getInstance());
+            listDataSource.new InternalDataSubscriber(), CallerThreadExecutor.getInstance());
       }
     }
     return listDataSource;
@@ -86,7 +85,7 @@ public class ListDataSource<T> extends AbstractDataSource<List<CloseableReferenc
 
   private void onDataSourceFinished() {
     if (increaseAndCheckIfLast()) {
-      setResult(null, /* isLast */ true);
+      setResult(null, /* isLast */ true, null);
     }
   }
 
@@ -95,7 +94,8 @@ public class ListDataSource<T> extends AbstractDataSource<List<CloseableReferenc
   }
 
   private void onDataSourceFailed(DataSource<CloseableReference<T>> dataSource) {
-    setFailure(dataSource.getFailureCause());
+    final Throwable failureCause = dataSource.getFailureCause();
+    setFailure(failureCause != null ? failureCause : new Throwable("Unknown failure cause"));
   }
 
   private void onDataSourceCancelled() {
@@ -111,6 +111,7 @@ public class ListDataSource<T> extends AbstractDataSource<List<CloseableReferenc
   }
 
   private class InternalDataSubscriber implements DataSubscriber<CloseableReference<T>> {
+
     @GuardedBy("InternalDataSubscriber.this")
     boolean mFinished = false;
 

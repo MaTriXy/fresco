@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.drawable;
@@ -44,13 +42,11 @@ public class ArrayDrawableTest {
     when(mUnderlyingDrawable0.mutate()).thenReturn(mUnderlyingDrawable0);
     when(mUnderlyingDrawable1.mutate()).thenReturn(mUnderlyingDrawable1);
     when(mUnderlyingDrawable2.mutate()).thenReturn(mUnderlyingDrawable2);
-    mArrayDrawable = new ArrayDrawable(new Drawable[] {
-        mUnderlyingDrawable0,
-        null,
-        mUnderlyingDrawable1,
-        null,
-        mUnderlyingDrawable2
-    });
+    mArrayDrawable =
+        new ArrayDrawable(
+            new Drawable[] {
+              mUnderlyingDrawable0, null, mUnderlyingDrawable1, null, mUnderlyingDrawable2
+            });
   }
 
   @Test
@@ -166,7 +162,7 @@ public class ArrayDrawableTest {
     mArrayDrawable.setDrawable(2, null);
 
     int level = 10;
-    int[] state = new int[]{1, 2, 3};
+    int[] state = new int[] {1, 2, 3};
     BitmapDrawable newDrawable = mock(BitmapDrawable.class);
     when(newDrawable.mutate()).thenReturn(newDrawable);
     Rect rect = new Rect(1, 2, 3, 4);

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.request;
@@ -20,7 +18,12 @@ import static com.facebook.imagepipeline.common.SourceUriType.SOURCE_TYPE_QUALIF
 import static com.facebook.imagepipeline.common.SourceUriType.SOURCE_TYPE_UNKNOWN;
 
 import android.net.Uri;
+import android.os.Build;
+import androidx.annotation.IntDef;
+import com.facebook.cache.common.CacheKey;
+import com.facebook.common.internal.Fn;
 import com.facebook.common.internal.Objects;
+import com.facebook.common.internal.Preconditions;
 import com.facebook.common.media.MediaUtils;
 import com.facebook.common.util.UriUtil;
 import com.facebook.imagepipeline.common.BytesRange;
@@ -29,9 +32,13 @@ import com.facebook.imagepipeline.common.Priority;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.common.RotationOptions;
 import com.facebook.imagepipeline.common.SourceUriType;
+import com.facebook.imagepipeline.core.DownsampleMode;
 import com.facebook.imagepipeline.listener.RequestListener;
 import com.facebook.imageutils.BitmapUtil;
+import com.facebook.infer.annotation.Nullsafe;
+import com.facebook.memory.helper.HashCode;
 import java.io.File;
+import java.util.HashMap;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -39,7 +46,12 @@ import javax.annotation.concurrent.Immutable;
  * Immutable object encapsulating everything pipeline has to know about requested image to proceed.
  */
 @Immutable
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ImageRequest {
+
+  private static boolean sUseCachedHashcodeInEquals;
+  private static boolean sCacheHashcode;
+  private int mHashcode;
 
   /** Cache choice */
   private final CacheChoice mCacheChoice;
@@ -49,17 +61,17 @@ public class ImageRequest {
 
   private final @SourceUriType int mSourceUriType;
 
-  /** Media variations - useful for potentially providing fallback to an alternative cached image */
-  private final @Nullable MediaVariations mMediaVariations;
-
   /** Source File - for local fetches only, lazily initialized */
-  private File mSourceFile;
+  @Nullable private File mSourceFile;
 
   /** If set - the client will receive intermediate results */
   private final boolean mProgressiveRenderingEnabled;
 
   /** If set the client will receive thumbnail previews for local images, before the whole image */
   private final boolean mLocalThumbnailPreviewsEnabled;
+
+  /** If set, only the image thumbnail will be loaded, not the full image */
+  private final boolean mLoadThumbnailOnly;
 
   private final ImageDecodeOptions mImageDecodeOptions;
 
@@ -78,24 +90,53 @@ public class ImageRequest {
   /** Lowest level that is permitted to fetch an image from */
   private final RequestLevel mLowestPermittedRequestLevel;
 
+  /**
+   * int in which each bit represents read or write permission of each cache from bitmap read bit
+   * (rightest) to disk write bit
+   */
+  protected int mCachesDisabled;
+
   /** Whether the disk cache should be used for this request */
   private final boolean mIsDiskCacheEnabled;
 
+  /** Whether the memory cache should be used for this request */
+  private final boolean mIsMemoryCacheEnabled;
+
+  /**
+   * Whether to decode prefetched images. true -> Cache both encoded image and bitmap. false ->
+   * Cache only encoded image and do not decode until image is needed to be shown. null -> Use
+   * pipeline's default
+   */
+  private final @Nullable Boolean mDecodePrefetches;
+
   /** Postprocessor to run on the output bitmap. */
-  private final Postprocessor mPostprocessor;
+  private final @Nullable Postprocessor mPostprocessor;
 
   /** Request listener to use for this image request */
   private final @Nullable RequestListener mRequestListener;
 
-  public static ImageRequest fromFile(@Nullable File file) {
+  /**
+   * Controls whether resizing is allowed for this request. true -> allow for this request. false ->
+   * disallow for this request. null -> use default pipeline's setting.
+   */
+  private final @Nullable Boolean mResizingAllowedOverride;
+
+  /** Custom downsample override for this request. null -> use default pipeline's setting. */
+  private final @Nullable DownsampleMode mDownsampleOverride;
+
+  private final @Nullable String mDiskCacheId;
+
+  private final int mDelayMs;
+
+  public static @Nullable ImageRequest fromFile(@Nullable File file) {
     return (file == null) ? null : ImageRequest.fromUri(UriUtil.getUriForFile(file));
   }
 
-  public static ImageRequest fromUri(@Nullable Uri uri) {
+  public static @Nullable ImageRequest fromUri(@Nullable Uri uri) {
     return (uri == null) ? null : ImageRequestBuilder.newBuilderWithSource(uri).build();
   }
 
-  public static ImageRequest fromUri(@Nullable String uriString) {
+  public static @Nullable ImageRequest fromUri(@Nullable String uriString) {
     return (uriString == null || uriString.length() == 0) ? null : fromUri(Uri.parse(uriString));
   }
 
@@ -103,25 +144,46 @@ public class ImageRequest {
     mCacheChoice = builder.getCacheChoice();
     mSourceUri = builder.getSourceUri();
     mSourceUriType = getSourceUriType(mSourceUri);
-    mMediaVariations = builder.getMediaVariations();
 
     mProgressiveRenderingEnabled = builder.isProgressiveRenderingEnabled();
     mLocalThumbnailPreviewsEnabled = builder.isLocalThumbnailPreviewsEnabled();
+    mLoadThumbnailOnly = builder.getLoadThumbnailOnly();
 
     mImageDecodeOptions = builder.getImageDecodeOptions();
 
     mResizeOptions = builder.getResizeOptions();
-    mRotationOptions = builder.getRotationOptions() == null
-        ? RotationOptions.autoRotate() : builder.getRotationOptions();
+    mRotationOptions =
+        builder.getRotationOptions() == null
+            ? RotationOptions.autoRotate()
+            : builder.getRotationOptions();
     mBytesRange = builder.getBytesRange();
 
     mRequestPriority = builder.getRequestPriority();
     mLowestPermittedRequestLevel = builder.getLowestPermittedRequestLevel();
+
     mIsDiskCacheEnabled = builder.isDiskCacheEnabled();
+
+    int cachesDisabledFlags = builder.getCachesDisabled();
+    if (!mIsDiskCacheEnabled) {
+      // If disk cache is disabled we must make sure mCachesDisabled reflects it
+      cachesDisabledFlags |= CachesLocationsMasks.DISK_READ | CachesLocationsMasks.DISK_WRITE;
+    }
+    mCachesDisabled = cachesDisabledFlags;
+
+    mIsMemoryCacheEnabled = builder.isMemoryCacheEnabled();
+    mDecodePrefetches = builder.shouldDecodePrefetches();
 
     mPostprocessor = builder.getPostprocessor();
 
     mRequestListener = builder.getRequestListener();
+
+    mResizingAllowedOverride = builder.getResizingAllowedOverride();
+
+    mDownsampleOverride = builder.getDownsampleOverride();
+
+    mDelayMs = builder.getDelayMs();
+
+    mDiskCacheId = builder.getDiskCacheId();
   }
 
   public CacheChoice getCacheChoice() {
@@ -136,16 +198,12 @@ public class ImageRequest {
     return mSourceUriType;
   }
 
-  public @Nullable MediaVariations getMediaVariations() {
-    return mMediaVariations;
-  }
-
   public int getPreferredWidth() {
-    return (mResizeOptions != null) ? mResizeOptions.width : (int) BitmapUtil.MAX_BITMAP_SIZE;
+    return (mResizeOptions != null) ? mResizeOptions.width : (int) BitmapUtil.MAX_BITMAP_DIMENSION;
   }
 
   public int getPreferredHeight() {
-    return (mResizeOptions != null) ? mResizeOptions.height : (int) BitmapUtil.MAX_BITMAP_SIZE;
+    return (mResizeOptions != null) ? mResizeOptions.height : (int) BitmapUtil.MAX_BITMAP_DIMENSION;
   }
 
   public @Nullable ResizeOptions getResizeOptions() {
@@ -181,6 +239,10 @@ public class ImageRequest {
     return mLocalThumbnailPreviewsEnabled;
   }
 
+  public boolean getLoadThumbnailOnlyForAndroidSdkAboveQ() {
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mLoadThumbnailOnly;
+  }
+
   public Priority getPriority() {
     return mRequestPriority;
   }
@@ -189,12 +251,42 @@ public class ImageRequest {
     return mLowestPermittedRequestLevel;
   }
 
+  public int getCachesDisabled() {
+    return mCachesDisabled;
+  }
+
   public boolean isDiskCacheEnabled() {
     return mIsDiskCacheEnabled;
   }
 
+  /** Returns whether the use of the cache is enabled for read or write according to given mask. */
+  public boolean isCacheEnabled(int cacheMask) {
+    return (getCachesDisabled() & cacheMask) == 0;
+  }
+
+  public boolean isMemoryCacheEnabled() {
+    return mIsMemoryCacheEnabled;
+  }
+
+  public @Nullable Boolean shouldDecodePrefetches() {
+    return mDecodePrefetches;
+  }
+
+  public @Nullable Boolean getResizingAllowedOverride() {
+    return mResizingAllowedOverride;
+  }
+
+  public @Nullable DownsampleMode getDownsampleOverride() {
+    return mDownsampleOverride;
+  }
+
+  public int getDelayMs() {
+    return mDelayMs;
+  }
+
   public synchronized File getSourceFile() {
     if (mSourceFile == null) {
+      Preconditions.checkNotNull(mSourceUri.getPath());
       mSourceFile = new File(mSourceUri.getPath());
     }
     return mSourceFile;
@@ -208,21 +300,122 @@ public class ImageRequest {
     return mRequestListener;
   }
 
+  public @Nullable String getDiskCacheId() {
+    return mDiskCacheId;
+  }
+
   @Override
-  public boolean equals(Object o) {
+  public boolean equals(@Nullable Object o) {
     if (!(o instanceof ImageRequest)) {
       return false;
     }
     ImageRequest request = (ImageRequest) o;
-    return Objects.equal(mSourceUri, request.mSourceUri) &&
-        Objects.equal(mCacheChoice, request.mCacheChoice) &&
-        Objects.equal(mMediaVariations, request.mMediaVariations) &&
-        Objects.equal(mSourceFile, request.mSourceFile);
+    if (sUseCachedHashcodeInEquals) {
+      int a = mHashcode;
+      int b = request.mHashcode;
+      if (a != 0 && b != 0 && a != b) {
+        return false;
+      }
+    }
+    if (mLocalThumbnailPreviewsEnabled != request.mLocalThumbnailPreviewsEnabled) return false;
+    if (mIsDiskCacheEnabled != request.mIsDiskCacheEnabled) return false;
+    if (mIsMemoryCacheEnabled != request.mIsMemoryCacheEnabled) return false;
+    if (!Objects.equal(mSourceUri, request.mSourceUri)
+        || !Objects.equal(mCacheChoice, request.mCacheChoice)
+        || !Objects.equal(mDiskCacheId, request.mDiskCacheId)
+        || !Objects.equal(mSourceFile, request.mSourceFile)
+        || !Objects.equal(mBytesRange, request.mBytesRange)
+        || !Objects.equal(mImageDecodeOptions, request.mImageDecodeOptions)
+        || !Objects.equal(mResizeOptions, request.mResizeOptions)
+        || !Objects.equal(mRequestPriority, request.mRequestPriority)
+        || !Objects.equal(mLowestPermittedRequestLevel, request.mLowestPermittedRequestLevel)
+        || !Objects.equal(mCachesDisabled, request.mCachesDisabled)
+        || !Objects.equal(mDecodePrefetches, request.mDecodePrefetches)
+        || !Objects.equal(mResizingAllowedOverride, request.mResizingAllowedOverride)
+        || !Objects.equal(mDownsampleOverride, request.mDownsampleOverride)
+        || !Objects.equal(mRotationOptions, request.mRotationOptions)
+        || mLoadThumbnailOnly != request.mLoadThumbnailOnly) {
+      return false;
+    }
+    final CacheKey thisPostprocessorKey =
+        mPostprocessor != null ? mPostprocessor.getPostprocessorCacheKey() : null;
+    final CacheKey thatPostprocessorKey =
+        request.mPostprocessor != null ? request.mPostprocessor.getPostprocessorCacheKey() : null;
+    if (!Objects.equal(thisPostprocessorKey, thatPostprocessorKey)) return false;
+    return mDelayMs == request.mDelayMs;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(mCacheChoice, mSourceUri, mMediaVariations, mSourceFile);
+    final boolean cacheHashcode = sCacheHashcode;
+    int result = 0;
+    if (cacheHashcode) {
+      result = mHashcode;
+    }
+    if (result == 0) {
+      final CacheKey postprocessorCacheKey =
+          mPostprocessor != null ? mPostprocessor.getPostprocessorCacheKey() : null;
+      result = HashCode.extend(0, mCacheChoice);
+      result = HashCode.extend(result, mSourceUri);
+      result = HashCode.extend(result, mLocalThumbnailPreviewsEnabled);
+      result = HashCode.extend(result, mBytesRange);
+      result = HashCode.extend(result, mRequestPriority);
+      result = HashCode.extend(result, mLowestPermittedRequestLevel);
+      result = HashCode.extend(result, mCachesDisabled);
+      result = HashCode.extend(result, mIsDiskCacheEnabled);
+      result = HashCode.extend(result, mIsMemoryCacheEnabled);
+      result = HashCode.extend(result, mImageDecodeOptions);
+      result = HashCode.extend(result, mDecodePrefetches);
+      result = HashCode.extend(result, mResizeOptions);
+      result = HashCode.extend(result, mRotationOptions);
+      result = HashCode.extend(result, postprocessorCacheKey);
+      result = HashCode.extend(result, mResizingAllowedOverride);
+      result = HashCode.extend(result, mDownsampleOverride);
+      result = HashCode.extend(result, mDelayMs);
+      result = HashCode.extend(result, mLoadThumbnailOnly);
+      // ^ I *think* this is safe despite autoboxing...?
+      if (cacheHashcode) {
+        mHashcode = result;
+      }
+    }
+    return result;
+  }
+
+  public void recordHashCode(HashMap<String, Integer> hashCodeLog) {
+    final CacheKey postprocessorCacheKey =
+        mPostprocessor != null ? mPostprocessor.getPostprocessorCacheKey() : null;
+    hashCodeLog.put("ImageRequest", hashCode());
+
+    hashCodeLog.put("ImageRequest.mSourceUri", getHashCodeHelper(mSourceUri));
+    hashCodeLog.put(
+        "ImageRequest.mLocalThumbnailPreviewsEnabled",
+        getHashCodeHelper(mLocalThumbnailPreviewsEnabled));
+    hashCodeLog.put("ImageRequest.mBytesRange", getHashCodeHelper(mBytesRange));
+    hashCodeLog.put("ImageRequest.mRequestPriority", getHashCodeHelper(mRequestPriority));
+    hashCodeLog.put(
+        "ImageRequest.mLowestPermittedRequestLevel",
+        getHashCodeHelper(mLowestPermittedRequestLevel));
+    hashCodeLog.put("ImageRequest.mCachesDisabled", getHashCodeHelper(mCachesDisabled));
+    hashCodeLog.put("ImageRequest.mIsDiskCacheEnabled", getHashCodeHelper(mIsDiskCacheEnabled));
+    hashCodeLog.put("ImageRequest.mIsMemoryCacheEnabled", getHashCodeHelper(mIsMemoryCacheEnabled));
+    hashCodeLog.put("ImageRequest.mImageDecodeOptions", getHashCodeHelper(mImageDecodeOptions));
+    hashCodeLog.put("ImageRequest.mDecodePrefetches", getHashCodeHelper(mDecodePrefetches));
+    hashCodeLog.put("ImageRequest.mSoumResizeOptionsrceUri", getHashCodeHelper(mResizeOptions));
+    hashCodeLog.put("ImageRequest.mRotationOptions", getHashCodeHelper(mRotationOptions));
+    hashCodeLog.put("ImageRequest.postprocessorCacheKey", getHashCodeHelper(postprocessorCacheKey));
+    hashCodeLog.put(
+        "ImageRequest.mResizingAllowedOverride", getHashCodeHelper(mResizingAllowedOverride));
+    hashCodeLog.put("ImageRequest.mDownsampleOverride", getHashCodeHelper(mDownsampleOverride));
+    hashCodeLog.put("ImageRequest.mDelayMs", getHashCodeHelper(mDelayMs));
+    hashCodeLog.put("ImageRequest.mLoadThumbnailOnly", getHashCodeHelper(mLoadThumbnailOnly));
+  }
+
+  private static int getHashCodeHelper(final @Nullable Object obj) {
+    if (obj == null) {
+      return 0;
+    } else {
+      return obj.hashCode();
+    }
   }
 
   @Override
@@ -236,20 +429,31 @@ public class ImageRequest {
         .add("resizeOptions", mResizeOptions)
         .add("rotationOptions", mRotationOptions)
         .add("bytesRange", mBytesRange)
-        .add("mediaVariations", mMediaVariations)
+        .add("resizingAllowedOverride", mResizingAllowedOverride)
+        .add("downsampleOverride", mDownsampleOverride)
+        .add("progressiveRenderingEnabled", mProgressiveRenderingEnabled)
+        .add("localThumbnailPreviewsEnabled", mLocalThumbnailPreviewsEnabled)
+        .add("loadThumbnailOnly", mLoadThumbnailOnly)
+        .add("lowestPermittedRequestLevel", mLowestPermittedRequestLevel)
+        .add("cachesDisabled", mCachesDisabled)
+        .add("isDiskCacheEnabled", mIsDiskCacheEnabled)
+        .add("isMemoryCacheEnabled", mIsMemoryCacheEnabled)
+        .add("decodePrefetches", mDecodePrefetches)
+        .add("delayMs", mDelayMs)
         .toString();
   }
 
-  /**
-   * An enum describing the cache choice.
-   */
+  /** An enum describing the cache choice. */
   public enum CacheChoice {
 
     /* Indicates that this image should go in the small disk cache, if one is being used */
     SMALL,
 
     /* Default */
-    DEFAULT
+    DEFAULT,
+
+    /* Indicates that the image should go in the consumer provided cache, represent by the ImageRequest’s cacheId */
+    DYNAMIC
   }
 
   /**
@@ -285,17 +489,51 @@ public class ImageRequest {
   }
 
   /**
+   * Caches bit locations in cachesDisabled from bitmap read bit (rightest bit, 00000001) to disk
+   * write bit (00100000). Uses for creating mask when performing bitwise operation with
+   * cachesDisabled in order to turn on (disable cache) or turn off (enable cache) the right bit.
+   */
+  @IntDef({
+    CachesLocationsMasks.BITMAP_READ,
+    CachesLocationsMasks.BITMAP_WRITE,
+    CachesLocationsMasks.ENCODED_READ,
+    CachesLocationsMasks.ENCODED_WRITE,
+    CachesLocationsMasks.DISK_READ,
+    CachesLocationsMasks.DISK_WRITE
+  })
+  public @interface CachesLocationsMasks {
+    /* bitmap cache read bit location- 00000001  */
+    final /* bitmap cache read bit location- 00000001  */ int BITMAP_READ = 1;
+
+    /* bitmap cache write bit location- 00000010  */
+    final /* bitmap cache write bit location- 00000010  */ int BITMAP_WRITE = 2;
+
+    /* encoded cache read bit location- 00000100  */
+    final /* encoded cache read bit location- 00000100  */ int ENCODED_READ = 4;
+
+    /* encoded cache write bit location- 00001000  */
+    final /* encoded cache write bit location- 00001000  */ int ENCODED_WRITE = 8;
+
+    /* disk cache read bit location- 00010000  */
+    final /* disk cache read bit location- 00010000  */ int DISK_READ = 16;
+
+    /* disk cache write bit location- 00100000  */
+    final /* disk cache write bit location- 00100000  */ int DISK_WRITE = 32;
+  }
+
+  /**
    * This is a utility method which returns the type of Uri
+   *
    * @param uri The Uri to test
    * @return The type of the given Uri if available or SOURCE_TYPE_UNKNOWN if not
    */
-  private static @SourceUriType int getSourceUriType(final Uri uri) {
+  private static @SourceUriType int getSourceUriType(final @Nullable Uri uri) {
     if (uri == null) {
       return SOURCE_TYPE_UNKNOWN;
     }
     if (UriUtil.isNetworkUri(uri)) {
       return SOURCE_TYPE_NETWORK;
-    } else if (UriUtil.isLocalFileUri(uri)) {
+    } else if (uri.getPath() != null && UriUtil.isLocalFileUri(uri)) {
       if (MediaUtils.isVideo(MediaUtils.extractMime(uri.getPath()))) {
         return SOURCE_TYPE_LOCAL_VIDEO_FILE;
       } else {
@@ -309,10 +547,26 @@ public class ImageRequest {
       return SOURCE_TYPE_LOCAL_RESOURCE;
     } else if (UriUtil.isDataUri(uri)) {
       return SOURCE_TYPE_DATA;
-    } else if (UriUtil.isQualifiedResourceUri(uri))  {
+    } else if (UriUtil.isQualifiedResourceUri(uri)) {
       return SOURCE_TYPE_QUALIFIED_RESOURCE;
     } else {
       return SOURCE_TYPE_UNKNOWN;
     }
+  }
+
+  public static final Fn<ImageRequest, Uri> REQUEST_TO_URI_FN =
+      new Fn<ImageRequest, Uri>() {
+        @Override
+        public @Nullable Uri apply(@Nullable ImageRequest arg) {
+          return arg != null ? arg.getSourceUri() : null;
+        }
+      };
+
+  public static void setUseCachedHashcodeInEquals(boolean useCachedHashcodeInEquals) {
+    sUseCachedHashcodeInEquals = useCachedHashcodeInEquals;
+  }
+
+  public static void setCacheHashcode(boolean cacheHashcode) {
+    sCacheHashcode = cacheHashcode;
   }
 }

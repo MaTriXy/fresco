@@ -1,21 +1,19 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.streams;
 
+import com.facebook.infer.annotation.Nullsafe;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-/**
- * Reads the wrapped InputStream only until a specified number of bytes, the 'limit' is reached.
- */
+/** Reads the wrapped InputStream only until a specified number of bytes, the 'limit' is reached. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class LimitedInputStream extends FilterInputStream {
   private int mBytesToRead;
   private int mBytesToReadWhenMarked;

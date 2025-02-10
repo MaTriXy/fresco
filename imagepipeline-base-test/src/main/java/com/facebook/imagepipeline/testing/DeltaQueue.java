@@ -1,20 +1,22 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.testing;
 
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
+
 /**
- * A queue of nodes sorted by timestamp for the purpose of implementing a scheduled executor.
- * Used for {@link ScheduledQueue}.
+ * A queue of nodes sorted by timestamp for the purpose of implementing a scheduled executor. Used
+ * for {@link ScheduledQueue}.
  *
  * @param <T> the type of node
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DeltaQueue<T> {
   /**
    * A node in the queue.
@@ -24,7 +26,7 @@ public class DeltaQueue<T> {
   private static class Node<T> {
     public final T value;
     public long delay;
-    public Node<T> next = null;
+    @Nullable public Node<T> next = null;
 
     public Node(T value, long nanos) {
       this.value = value;
@@ -32,7 +34,7 @@ public class DeltaQueue<T> {
     }
   }
 
-  private Node<T> head = null;
+  @Nullable private Node<T> head = null;
   private int size;
 
   /**
@@ -59,6 +61,7 @@ public class DeltaQueue<T> {
    * @return the next item in the queue
    */
   public T next() {
+    // NULLSAFE_FIXME[Nullable Dereference]
     return head.value;
   }
 
@@ -68,6 +71,7 @@ public class DeltaQueue<T> {
    * @return the delay until the next item
    */
   public long delay() {
+    // NULLSAFE_FIXME[Nullable Dereference]
     return head.delay;
   }
 
@@ -129,11 +133,14 @@ public class DeltaQueue<T> {
    * @return the next element off the queue.
    */
   public T pop() {
+    // NULLSAFE_FIXME[Nullable Dereference]
     if (head.delay > 0) {
       throw new IllegalStateException("cannot pop the head element when it has a non-zero delay");
     }
 
+    // NULLSAFE_FIXME[Nullable Dereference]
     T popped = head.value;
+    // NULLSAFE_FIXME[Nullable Dereference]
     head = head.next;
     size--;
     return popped;
@@ -182,18 +189,14 @@ public class DeltaQueue<T> {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append(getClass().getSimpleName())
-        .append("[");
+    sb.append(getClass().getSimpleName()).append("[");
 
     Node<T> node = head;
     while (node != null) {
       if (node != head) {
         sb.append(", ");
       }
-      sb.append("+")
-          .append(node.delay)
-          .append(": ")
-          .append(node.value);
+      sb.append("+").append(node.delay).append(": ").append(node.value);
 
       node = node.next;
     }

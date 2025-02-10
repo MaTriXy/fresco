@@ -1,27 +1,23 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.memory;
 
-import static org.mockito.Matchers.*;
+import static org.mockito.ArgumentMatchers.*;
 
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.references.SharedReference;
 import java.io.Closeable;
 import org.mockito.*;
 
-/**
- * Utilities for testing {@link CloseableReference}.
- */
+/** Utilities for testing {@link CloseableReference}. */
 public class CloseableReferences {
   private static class CloseableReferenceMatcher<T extends Closeable>
-      extends ArgumentMatcher<CloseableReference<T>> {
+      implements ArgumentMatcher<CloseableReference<T>> {
 
     private final CloseableReference<T> mCloseableReference;
 
@@ -30,19 +26,15 @@ public class CloseableReferences {
     }
 
     @Override
-    public boolean matches(Object argument) {
-      if (!(argument instanceof CloseableReference)) {
-        return false;
-      }
-
-      return mCloseableReference.getUnderlyingReferenceTestOnly() ==
-          ((CloseableReference) argument).getUnderlyingReferenceTestOnly();
+    public boolean matches(CloseableReference argument) {
+      return mCloseableReference.getUnderlyingReferenceTestOnly()
+          == argument.getUnderlyingReferenceTestOnly();
     }
   }
 
   /**
-   * Returns a Mockito ArgumentMatcher that checks that its argument has the same underlying
-   * {@link SharedReference}
+   * Returns a Mockito ArgumentMatcher that checks that its argument has the same underlying {@link
+   * SharedReference}
    */
   public static <T extends Closeable> CloseableReference<T> eqUnderlying(
       CloseableReference<T> closeableReference) {

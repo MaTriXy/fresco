@@ -1,14 +1,10 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.samples.animation2.color;
 
 import android.content.res.Resources;
@@ -17,14 +13,12 @@ import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.IntRange;
-import android.support.annotation.Nullable;
+import androidx.annotation.IntRange;
+import androidx.annotation.Nullable;
 import com.facebook.fresco.animation.backend.AnimationBackend;
 import com.facebook.samples.animation2.SampleData;
 
-/**
- * Example color backend that takes a list of colors and cycles through them.
- */
+/** Example color backend that takes a list of colors and cycles through them. */
 public class ExampleColorBackend implements AnimationBackend {
 
   /**
@@ -61,13 +55,27 @@ public class ExampleColorBackend implements AnimationBackend {
   }
 
   @Override
+  public int getLoopDurationMs() {
+    return getFrameCount() * mFrameDurationMs;
+  }
+
+  @Override
+  public int width() {
+    return -1;
+  }
+
+  @Override
+  public int height() {
+    return -1;
+  }
+
+  @Override
   public int getLoopCount() {
     return 3;
   }
 
   @Override
-  public boolean drawFrame(
-      Drawable parent, Canvas canvas, int frameNumber) {
+  public boolean drawFrame(Drawable parent, Canvas canvas, int frameNumber) {
     if (mBounds == null) {
       return false;
     }
@@ -97,8 +105,10 @@ public class ExampleColorBackend implements AnimationBackend {
   }
 
   @Override
-  public void clear() {
-  }
+  public void clear() {}
+
+  @Override
+  public void preloadAnimation() {}
 
   @Override
   public int getIntrinsicWidth() {
@@ -109,4 +119,7 @@ public class ExampleColorBackend implements AnimationBackend {
   public int getIntrinsicHeight() {
     return INTRINSIC_DIMENSION_UNSET;
   }
+
+  @Override
+  public void setAnimationListener(@javax.annotation.Nullable Listener listener) {}
 }

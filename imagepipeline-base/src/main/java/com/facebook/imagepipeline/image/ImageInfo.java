@@ -1,19 +1,14 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.image;
 
-/**
- * Interface containing information about an image.
- */
-public interface ImageInfo {
-
+/** Interface containing information about an image. */
+public interface ImageInfo extends HasImageMetadata {
   /**
    * @return width of the image
    */
@@ -23,6 +18,13 @@ public interface ImageInfo {
    * @return height of the image
    */
   int getHeight();
+
+  /**
+   * @return size in bytes of the image
+   */
+  default int getSizeInBytes() {
+    return 0;
+  }
 
   /**
    * @return quality information for the image

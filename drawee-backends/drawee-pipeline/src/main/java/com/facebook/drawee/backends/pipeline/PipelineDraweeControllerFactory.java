@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.backends.pipeline;
@@ -12,36 +10,36 @@ package com.facebook.drawee.backends.pipeline;
 import android.content.res.Resources;
 import com.facebook.cache.common.CacheKey;
 import com.facebook.common.internal.ImmutableList;
-import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
-import com.facebook.common.references.CloseableReference;
-import com.facebook.datasource.DataSource;
 import com.facebook.drawee.components.DeferredReleaser;
 import com.facebook.imagepipeline.cache.MemoryCache;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
 import com.facebook.imagepipeline.image.CloseableImage;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
-/**
- * Default implementation of {@link PipelineDraweeControllerFactory}.
- */
+/** Default implementation of {@link PipelineDraweeControllerFactory}. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class PipelineDraweeControllerFactory {
 
+  // NULLSAFE_FIXME[Field Not Initialized]
   private Resources mResources;
+  // NULLSAFE_FIXME[Field Not Initialized]
   private DeferredReleaser mDeferredReleaser;
-  private DrawableFactory mAnimatedDrawableFactory;
+  @Nullable private DrawableFactory mAnimatedDrawableFactory;
+  @Nullable private DrawableFactory mXmlDrawableFactory;
+  // NULLSAFE_FIXME[Field Not Initialized]
   private Executor mUiThreadExecutor;
-  private MemoryCache<CacheKey, CloseableImage> mMemoryCache;
-  @Nullable
-  private ImmutableList<DrawableFactory> mDrawableFactories;
-  @Nullable
-  private Supplier<Boolean> mDebugOverlayEnabledSupplier;
+  @Nullable private MemoryCache<CacheKey, CloseableImage> mMemoryCache;
+  @Nullable private ImmutableList<DrawableFactory> mDrawableFactories;
+  @Nullable private Supplier<Boolean> mDebugOverlayEnabledSupplier;
 
   public void init(
       Resources resources,
       DeferredReleaser deferredReleaser,
-      DrawableFactory animatedDrawableFactory,
+      @Nullable DrawableFactory animatedDrawableFactory,
+      @Nullable DrawableFactory xmlDrawableFactory,
       Executor uiThreadExecutor,
       MemoryCache<CacheKey, CloseableImage> memoryCache,
       @Nullable ImmutableList<DrawableFactory> drawableFactories,
@@ -49,41 +47,23 @@ public class PipelineDraweeControllerFactory {
     mResources = resources;
     mDeferredReleaser = deferredReleaser;
     mAnimatedDrawableFactory = animatedDrawableFactory;
+    mXmlDrawableFactory = xmlDrawableFactory;
     mUiThreadExecutor = uiThreadExecutor;
     mMemoryCache = memoryCache;
     mDrawableFactories = drawableFactories;
     mDebugOverlayEnabledSupplier = debugOverlayEnabledSupplier;
   }
 
-  public PipelineDraweeController newController(
-      Supplier<DataSource<CloseableReference<CloseableImage>>> dataSourceSupplier,
-      String id,
-      CacheKey cacheKey,
-      Object callerContext) {
-    return newController(dataSourceSupplier, id, cacheKey, callerContext, null);
-  }
-
-  public PipelineDraweeController newController(
-      Supplier<DataSource<CloseableReference<CloseableImage>>> dataSourceSupplier,
-      String id,
-      CacheKey cacheKey,
-      Object callerContext,
-      @Nullable ImmutableList<DrawableFactory> customDrawableFactories) {
-    Preconditions.checkState(mResources != null, "init() not called");
-    // Field values passed as arguments so that any subclass of PipelineDraweeControllerFactory
-    // can simply override internalCreateController() and return a custom Drawee controller
-    PipelineDraweeController controller = internalCreateController(
-        mResources,
-        mDeferredReleaser,
-        mAnimatedDrawableFactory,
-        mUiThreadExecutor,
-        mMemoryCache,
-        mDrawableFactories,
-        customDrawableFactories,
-        dataSourceSupplier,
-        id,
-        cacheKey,
-        callerContext);
+  public PipelineDraweeController newController() {
+    PipelineDraweeController controller =
+        internalCreateController(
+            mResources,
+            mDeferredReleaser,
+            mAnimatedDrawableFactory,
+            mXmlDrawableFactory,
+            mUiThreadExecutor,
+            mMemoryCache,
+            mDrawableFactories);
     if (mDebugOverlayEnabledSupplier != null) {
       controller.setDrawDebugOverlay(mDebugOverlayEnabledSupplier.get());
     }
@@ -93,27 +73,18 @@ public class PipelineDraweeControllerFactory {
   protected PipelineDraweeController internalCreateController(
       Resources resources,
       DeferredReleaser deferredReleaser,
-      DrawableFactory animatedDrawableFactory,
+      @Nullable DrawableFactory animatedDrawableFactory,
+      @Nullable DrawableFactory xmlDrawableFactory,
       Executor uiThreadExecutor,
-      MemoryCache<CacheKey, CloseableImage> memoryCache,
-      @Nullable ImmutableList<DrawableFactory> globalDrawableFactories,
-      @Nullable ImmutableList<DrawableFactory> customDrawableFactories,
-      Supplier<DataSource<CloseableReference<CloseableImage>>> dataSourceSupplier,
-      String id,
-      CacheKey cacheKey,
-      Object callerContext) {
-    PipelineDraweeController controller = new PipelineDraweeController(
+      @Nullable MemoryCache<CacheKey, CloseableImage> memoryCache,
+      @Nullable ImmutableList<DrawableFactory> drawableFactories) {
+    return new PipelineDraweeController(
         resources,
         deferredReleaser,
         animatedDrawableFactory,
+        xmlDrawableFactory,
         uiThreadExecutor,
         memoryCache,
-        dataSourceSupplier,
-        id,
-        cacheKey,
-        callerContext,
-        globalDrawableFactories);
-    controller.setCustomDrawableFactories(customDrawableFactories);
-    return controller;
+        drawableFactories);
   }
 }

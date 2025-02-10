@@ -1,24 +1,25 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
 
 import android.util.Pair;
 import com.facebook.common.internal.Preconditions;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
- * Only permits a configurable number of requests to be kicked off simultaneously. If that number
- * is exceeded, then requests are queued up and kicked off once other requests complete.
+ * Only permits a configurable number of requests to be kicked off simultaneously. If that number is
+ * exceeded, then requests are queued up and kicked off once other requests complete.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ThrottlingProducer<T> implements Producer<T> {
 
   public static final String PRODUCER_NAME = "ThrottlingProducer";
@@ -28,14 +29,14 @@ public class ThrottlingProducer<T> implements Producer<T> {
 
   @GuardedBy("this")
   private int mNumCurrentRequests;
+
   @GuardedBy("this")
   private final ConcurrentLinkedQueue<Pair<Consumer<T>, ProducerContext>> mPendingRequests;
+
   private final Executor mExecutor;
 
   public ThrottlingProducer(
-      int maxSimultaneousRequests,
-      Executor executor,
-      final Producer<T> inputProducer) {
+      int maxSimultaneousRequests, Executor executor, final Producer<T> inputProducer) {
     mMaxSimultaneousRequests = maxSimultaneousRequests;
     mExecutor = Preconditions.checkNotNull(executor);
     mInputProducer = Preconditions.checkNotNull(inputProducer);
@@ -45,8 +46,8 @@ public class ThrottlingProducer<T> implements Producer<T> {
 
   @Override
   public void produceResults(final Consumer<T> consumer, final ProducerContext producerContext) {
-    final ProducerListener producerListener = producerContext.getListener();
-    producerListener.onProducerStart(producerContext.getId(), PRODUCER_NAME);
+    final ProducerListener2 producerListener = producerContext.getProducerListener();
+    producerListener.onProducerStart(producerContext, PRODUCER_NAME);
 
     boolean delayRequest;
     synchronized (this) {
@@ -65,8 +66,8 @@ public class ThrottlingProducer<T> implements Producer<T> {
   }
 
   void produceResultsInternal(Consumer<T> consumer, ProducerContext producerContext) {
-    ProducerListener producerListener = producerContext.getListener();
-    producerListener.onProducerFinishWithSuccess(producerContext.getId(), PRODUCER_NAME, null);
+    ProducerListener2 producerListener = producerContext.getProducerListener();
+    producerListener.onProducerFinishWithSuccess(producerContext, PRODUCER_NAME, null);
     mInputProducer.produceResults(new ThrottlerConsumer(consumer), producerContext);
   }
 
@@ -77,7 +78,7 @@ public class ThrottlingProducer<T> implements Producer<T> {
     }
 
     @Override
-    protected void onNewResultImpl(T newResult, @Status int status) {
+    protected void onNewResultImpl(@Nullable T newResult, @Status int status) {
       getConsumer().onNewResult(newResult, status);
       if (isLast(status)) {
         onRequestFinished();

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.cache;
@@ -18,10 +16,12 @@ import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imagepipeline.image.EncodedImage;
 import org.junit.*;
-import org.junit.runner.*;
-import org.robolectric.*;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(manifest = Config.NONE)
 public class StagingAreaTest {
   private StagingArea mStagingArea;
   private CloseableReference<PooledByteBuffer> mCloseableReference;
@@ -69,9 +69,7 @@ public class StagingAreaTest {
 
   @Test
   public void testAnotherPut() {
-    mStagingArea.put(
-        mCacheKey,
-        mSecondEncodedImage);
+    mStagingArea.put(mCacheKey, mSecondEncodedImage);
     assertEquals(2, mCloseableReference.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
     assertSame(
         mCloseableReference2.getUnderlyingReferenceTestOnly(),

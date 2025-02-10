@@ -1,21 +1,15 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imageutils;
 
 import com.facebook.common.util.Hex;
-import java.lang.String;
-import java.lang.StringBuffer;
 
-/**
- * Provide test use functions for JfifUtilTest.
- */
+/** Provide test use functions for JfifUtilTest. */
 public class JfifTestUtils {
 
   // Markers
@@ -75,30 +69,25 @@ public class JfifTestUtils {
   }
 
   public static String makeSOFSection(int length, int bitDepth, int width, int height) {
-    return SOF_MARKER + encodeInt2HexString(length, 2, false) +
-        encodeInt2HexString(bitDepth, 1, false) +
-        encodeInt2HexString(height, 2, false) +
-        encodeInt2HexString(width, 2, false) +
-        encodeInt2HexString(0, length - 7, false);
+    return SOF_MARKER
+        + encodeInt2HexString(length, 2, false)
+        + encodeInt2HexString(bitDepth, 1, false)
+        + encodeInt2HexString(height, 2, false)
+        + encodeInt2HexString(width, 2, false)
+        + encodeInt2HexString(0, length - 7, false);
   }
 
   public static String makeOrientationEntry(int orientation, boolean isLittleEnd) {
-    return makeIfdEntry(
-        IFD_ENTRY_ORI_TAG, TYPE_SHORT, 1, orientation, 2, isLittleEnd);
+    return makeIfdEntry(IFD_ENTRY_ORI_TAG, TYPE_SHORT, 1, orientation, 2, isLittleEnd);
   }
 
   public static String makeIfdEntry(
-      int tag,
-      int type,
-      int count,
-      int value,
-      int valueNumBytes,
-      boolean littleEndian) {
-    return encodeInt2HexString(tag, 2, littleEndian) +
-        encodeInt2HexString(type, 2, littleEndian) +
-        encodeInt2HexString(count, 4, littleEndian) +
-        encodeInt2HexString(value, valueNumBytes, littleEndian) +
-        encodeInt2HexString(0, 4 - valueNumBytes, littleEndian);
+      int tag, int type, int count, int value, int valueNumBytes, boolean littleEndian) {
+    return encodeInt2HexString(tag, 2, littleEndian)
+        + encodeInt2HexString(type, 2, littleEndian)
+        + encodeInt2HexString(count, 4, littleEndian)
+        + encodeInt2HexString(value, valueNumBytes, littleEndian)
+        + encodeInt2HexString(0, 4 - valueNumBytes, littleEndian);
   }
 
   public static String makeIfd(String[] IfdEntries, int nextEntryOffset, boolean littleEndian) {

@@ -1,14 +1,10 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.samples.showcase.imageformat.svg;
 
 import android.graphics.Rect;
@@ -21,22 +17,24 @@ import com.facebook.imageformat.ImageFormatCheckerUtils;
 import com.facebook.imagepipeline.common.ImageDecodeOptions;
 import com.facebook.imagepipeline.decoder.ImageDecoder;
 import com.facebook.imagepipeline.drawable.DrawableFactory;
+import com.facebook.imagepipeline.image.BaseCloseableImage;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.imagepipeline.image.ImageInfo;
+import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
 import javax.annotation.Nullable;
 
-/**
- * SVG example that defines all classes required to decode and render SVG images.
- */
+/** SVG example that defines all classes required to decode and render SVG images. */
 public class SvgDecoderExample {
 
   public static final ImageFormat SVG_FORMAT = new ImageFormat("SVG_FORMAT", "svg");
 
   // We do not include the closing ">" since there can be additional information
   private static final String HEADER_TAG = "<svg";
-  private static final byte[][] POSSIBLE_HEADER_TAGS =
-      { ImageFormatCheckerUtils.asciiBytes("<?xml") };
+  private static final byte[][] POSSIBLE_HEADER_TAGS = {
+    ImageFormatCheckerUtils.asciiBytes("<?xml")
+  };
 
   public static class SvgFormatChecker implements ImageFormat.FormatChecker {
 
@@ -57,9 +55,10 @@ public class SvgDecoderExample {
         return SVG_FORMAT;
       }
       for (byte[] possibleHeaderTag : POSSIBLE_HEADER_TAGS) {
-        if (ImageFormatCheckerUtils.startsWithPattern(headerBytes, possibleHeaderTag) &&
-            ImageFormatCheckerUtils
-                .indexOfPattern(headerBytes, headerBytes.length, HEADER, HEADER.length) > -1) {
+        if (ImageFormatCheckerUtils.startsWithPattern(headerBytes, possibleHeaderTag)
+            && ImageFormatCheckerUtils.indexOfPattern(
+                    headerBytes, headerBytes.length, HEADER, HEADER.length)
+                > -1) {
           return SVG_FORMAT;
         }
       }
@@ -67,7 +66,7 @@ public class SvgDecoderExample {
     }
   }
 
-  public static class CloseableSvgImage extends CloseableImage {
+  public static class CloseableSvgImage extends BaseCloseableImage {
 
     private final SVG mSvg;
 
@@ -97,6 +96,11 @@ public class SvgDecoderExample {
     }
 
     @Override
+    public boolean isStateful() {
+      return false;
+    }
+
+    @Override
     public int getWidth() {
       return 0;
     }
@@ -105,11 +109,19 @@ public class SvgDecoderExample {
     public int getHeight() {
       return 0;
     }
+
+    @Override
+    public QualityInfo getQualityInfo() {
+      return ImmutableQualityInfo.FULL_QUALITY;
+    }
+
+    @Override
+    public ImageInfo getImageInfo() {
+      return this;
+    }
   }
 
-  /**
-   * Decodes a SVG_FORMAT image
-   */
+  /** Decodes a SVG_FORMAT image */
   public static class SvgDecoder implements ImageDecoder {
 
     @Override
@@ -128,9 +140,7 @@ public class SvgDecoderExample {
     }
   }
 
-  /**
-   * SVG drawable factory that creates {@link PictureDrawable}s for SVG images.
-   */
+  /** SVG drawable factory that creates {@link PictureDrawable}s for SVG images. */
   public static class SvgDrawableFactory implements DrawableFactory {
 
     @Override

@@ -1,24 +1,22 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.samples.scrollperf;
 
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
 import android.view.MenuItem;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import com.facebook.infer.annotation.Nullsafe;
 import com.facebook.samples.scrollperf.fragments.MainFragment;
 import com.facebook.samples.scrollperf.fragments.SettingsFragment;
 import com.facebook.samples.scrollperf.util.SizeUtil;
 
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class MainActivity extends AppCompatActivity {
 
   @Override
@@ -27,13 +25,15 @@ public class MainActivity extends AppCompatActivity {
     SizeUtil.initSizeData(this);
     setContentView(R.layout.activity_main);
     Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+    // NULLSAFE_FIXME[Nullable Dereference]
     toolbar.setTitle(R.string.app_name);
     setSupportActionBar(toolbar);
     if (savedInstanceState == null) {
       final MainFragment mainFragment = new MainFragment();
-      getSupportFragmentManager().beginTransaction()
-              .add(R.id.anchor_point, mainFragment, MainFragment.TAG)
-              .commit();
+      getSupportFragmentManager()
+          .beginTransaction()
+          .add(R.id.anchor_point, mainFragment, MainFragment.TAG)
+          .commit();
     }
   }
 
@@ -41,10 +41,11 @@ public class MainActivity extends AppCompatActivity {
   public boolean onOptionsItemSelected(MenuItem item) {
     if (item.getItemId() == R.id.action_settings) {
       final SettingsFragment settingsFragment = new SettingsFragment();
-      getSupportFragmentManager().beginTransaction()
-              .replace(R.id.anchor_point, settingsFragment, SettingsFragment.TAG)
-              .addToBackStack(SettingsFragment.TAG)
-              .commit();
+      getSupportFragmentManager()
+          .beginTransaction()
+          .replace(R.id.anchor_point, settingsFragment, SettingsFragment.TAG)
+          .addToBackStack(SettingsFragment.TAG)
+          .commit();
     }
     return super.onOptionsItemSelected(item);
   }

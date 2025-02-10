@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.streams;
@@ -78,8 +76,7 @@ public class TailAppendingInputStreamTest {
   public void testDoesNotReadTooMuch_multipleBytes() throws Exception {
     byte[] buffer = new byte[OUTPUT_LENGTH + 1];
     assertEquals(
-        OUTPUT_LENGTH,
-        ByteStreams.read(mTailAppendingInputStream, buffer, 0, OUTPUT_LENGTH + 1));
+        OUTPUT_LENGTH, ByteStreams.read(mTailAppendingInputStream, buffer, 0, OUTPUT_LENGTH + 1));
     assertEquals(-1, mTailAppendingInputStream.read());
   }
 
@@ -87,8 +84,7 @@ public class TailAppendingInputStreamTest {
   public void testUnalignedReads() throws IOException {
     assertEquals(128, mTailAppendingInputStream.read(mOutputBuffer, 256, 128));
     assertArrayEquals(
-        Arrays.copyOfRange(mBytes, 0, 128),
-        Arrays.copyOfRange(mOutputBuffer, 256, 384));
+        Arrays.copyOfRange(mBytes, 0, 128), Arrays.copyOfRange(mOutputBuffer, 256, 384));
     Arrays.fill(mOutputBuffer, 256, 384, (byte) 0);
     for (byte b : mOutputBuffer) {
       assertEquals(0, b);
@@ -105,8 +101,7 @@ public class TailAppendingInputStreamTest {
 
     assertEquals(128, mTailAppendingInputStream.read(mOutputBuffer, 256, 128));
     assertArrayEquals(
-        Arrays.copyOfRange(mTail, 0, 128),
-        Arrays.copyOfRange(mOutputBuffer, 256, 384));
+        Arrays.copyOfRange(mTail, 0, 128), Arrays.copyOfRange(mOutputBuffer, 256, 384));
     Arrays.fill(mOutputBuffer, 256, 384, (byte) 0);
     for (byte b : mOutputBuffer) {
       assertEquals(0, b);
@@ -129,8 +124,7 @@ public class TailAppendingInputStreamTest {
     assertEquals(128, mTailAppendingInputStream.read(mOutputBuffer, 0, 128));
     mTailAppendingInputStream.mark(BYTES_LENGTH);
     assertEquals(
-        BYTES_LENGTH,
-        ByteStreams.read(mTailAppendingInputStream, mOutputBuffer, 0, BYTES_LENGTH));
+        BYTES_LENGTH, ByteStreams.read(mTailAppendingInputStream, mOutputBuffer, 0, BYTES_LENGTH));
     mTailAppendingInputStream.reset();
     for (byte b : Arrays.copyOfRange(mOutputBuffer, 0, BYTES_LENGTH)) {
       assertEquals(((int) b) & 0xFF, mTailAppendingInputStream.read());

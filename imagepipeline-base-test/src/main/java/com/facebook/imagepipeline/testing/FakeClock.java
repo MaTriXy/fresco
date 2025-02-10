@@ -1,22 +1,20 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.testing;
 
 import com.facebook.common.time.MonotonicClock;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
-/**
- *
- *
- */
+/** */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class FakeClock implements MonotonicClock {
 
   public interface OnTickListener {
@@ -59,13 +57,13 @@ public class FakeClock implements MonotonicClock {
   /**
    * Increments the clock's time gradually in several steps
    *
-   * The clock will be incremented by tickMs amount repeatedly until it has progress by totalMs
+   * <p>The clock will be incremented by tickMs amount repeatedly until it has progress by totalMs
    * from the given time when this call was made.
    *
-   * This call is useful for working with animations in tests.
+   * <p>This call is useful for working with animations in tests.
    *
-   * In the end of this call, the call will progress by exactly totalMs, even if it means the last
-   * tick of the clock is smaller than tickMs
+   * <p>In the end of this call, the call will progress by exactly totalMs, even if it means the
+   * last tick of the clock is smaller than tickMs
    *
    * @param tickMs the amount to tick the clock at each step
    * @param totalMs the total amount of time to elapse during the call
@@ -81,6 +79,11 @@ public class FakeClock implements MonotonicClock {
   @Override
   public synchronized long now() {
     return now;
+  }
+
+  @Override
+  public long nowNanos() {
+    return TimeUnit.MILLISECONDS.toNanos(now());
   }
 
   /**

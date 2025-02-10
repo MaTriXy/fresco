@@ -1,24 +1,23 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.testing;
 
 import com.facebook.common.executors.SerialExecutorService;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.Callable;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
-/**
- * Implementation of {@link java.util.concurrent.ExecutorService} for unit tests.
- */
+/** Implementation of {@link java.util.concurrent.ExecutorService} for unit tests. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class TestExecutorService extends AbstractExecutorService implements SerialExecutorService {
 
   protected final ScheduledQueue scheduledQueue;
@@ -43,10 +42,11 @@ public class TestExecutorService extends AbstractExecutorService implements Seri
   }
 
   @Override
-  public void shutdown() {
-  }
+  public void shutdown() {}
 
+  @Nullable
   @Override
+  // NULLSAFE_FIXME[Inconsistent Subclass Return Annotation]
   public List<Runnable> shutdownNow() {
     return null;
   }

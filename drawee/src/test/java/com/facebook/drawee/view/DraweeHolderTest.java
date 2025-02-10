@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.view;
@@ -85,7 +83,7 @@ public class DraweeHolderTest {
   @Test
   public void testClearControllerKeepsHierarchy() {
     mDraweeHolder.setController(mController);
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     assertSame(mDraweeHierarchy, mDraweeHolder.getHierarchy());
     assertNull(mDraweeHolder.getController());
     assertNull(mController.getHierarchy());
@@ -127,7 +125,7 @@ public class DraweeHolderTest {
 
   @Test
   public void testSetNullController() {
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     mDraweeHolder.onAttach();
     mDraweeHolder.onDetach();
     mDraweeHolder.onAttach();
@@ -142,7 +140,7 @@ public class DraweeHolderTest {
     mDraweeHolder.setController(mController);
     draweeHolder2.setController(mController);
 
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     verify(mController, never()).onDetach();
     assertEquals(draweeHierarchy2, mController.getHierarchy());
   }
@@ -185,15 +183,12 @@ public class DraweeHolderTest {
     verify(mController, never()).onTouchEvent(any(MotionEvent.class));
   }
 
-  /** There are 8 possible state transitions with two variables
-   * 1. (visible, unattached)   -> (visible, attached)
-   * 2. (visible, attached)     -> (invisible, attached)
-   * 3. (invisible, attached)   -> (invisible, unattached)
-   * 4. (invisible, unattached) -> (visible, unattached)
-   * 5. (visible, unattached)   -> (invisible, unattached)
-   * 6. (invisible, unattached) -> (invisible, attached)
-   * 7. (invisible, attached)   -> (visible, attached)
-   * 8. (visible, attached)     -> (visible, unattached)
+  /**
+   * There are 8 possible state transitions with two variables 1. (visible, unattached) -> (visible,
+   * attached) 2. (visible, attached) -> (invisible, attached) 3. (invisible, attached) ->
+   * (invisible, unattached) 4. (invisible, unattached) -> (visible, unattached) 5. (visible,
+   * unattached) -> (invisible, unattached) 6. (invisible, unattached) -> (invisible, attached) 7.
+   * (invisible, attached) -> (visible, attached) 8. (visible, attached) -> (visible, unattached)
    */
   @Test
   public void testVisibilityStateTransitions() {

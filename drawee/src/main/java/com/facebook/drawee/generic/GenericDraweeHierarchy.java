@@ -1,44 +1,44 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.generic;
-
-import static com.facebook.drawee.drawable.ScalingUtils.ScaleType;
 
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PointF;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.drawee.drawable.DrawableParent;
 import com.facebook.drawee.drawable.FadeDrawable;
 import com.facebook.drawee.drawable.ForwardingDrawable;
 import com.facebook.drawee.drawable.MatrixDrawable;
 import com.facebook.drawee.drawable.ScaleTypeDrawable;
+import com.facebook.drawee.drawable.ScalingUtils;
 import com.facebook.drawee.interfaces.SettableDraweeHierarchy;
+import com.facebook.fresco.ui.common.OnFadeListener;
+import com.facebook.imagepipeline.systrace.FrescoSystrace;
 import javax.annotation.Nullable;
 
 /**
- * A SettableDraweeHierarchy that displays placeholder image until the actual image is set.
- * If provided, failure image will be used in case of failure (placeholder otherwise).
- * If provided, retry image will be used in case of failure when retrying is enabled.
- * If provided, progressbar will be displayed until fully loaded.
- * Each image can be displayed with a different scale type (or no scaling at all).
- * Fading between the layers is supported. Rounding is supported.
+ * A SettableDraweeHierarchy that displays placeholder image until the actual image is set. If
+ * provided, failure image will be used in case of failure (placeholder otherwise). If provided,
+ * retry image will be used in case of failure when retrying is enabled. If provided, progressbar
+ * will be displayed until fully loaded. Each image can be displayed with a different scale type (or
+ * no scaling at all). Fading between the layers is supported. Rounding is supported.
  *
- * <p>
- * Example hierarchy with a placeholder, retry, failure and the actual image:
- *  <pre>
+ * <p>Example hierarchy with a placeholder, retry, failure and the actual image:
+ *
+ * <pre>
  *  o RootDrawable (top level drawable)
  *  |
  *  +--o FadeDrawable
@@ -62,22 +62,24 @@ import javax.annotation.Nullable;
  *        +--o Drawable (failure image)
  *  </pre>
  *
- * <p>
- * Note:
+ * <p>Note:
+ *
  * <ul>
- * <li> RootDrawable and FadeDrawable are always created.
- * <li> All branches except the actual image branch are optional (placeholder, failure, retry,
- * progress bar). If some branch is not specified it won't be created. Index in FadeDrawable will
- * still be reserved though.
- * <li> If overlays and/or background are specified, they are added to the same fade drawable, and
- * are always being displayed.
- * <li> ScaleType and Matrix transformations will be added only if specified. If both are
- * unspecified, then the branch for that image is attached to FadeDrawable directly. Matrix
- * transformation is only supported for the actual image, and it is not recommended to be used.
- * <li> Rounding, if specified, is applied to all layers. Rounded drawable can either wrap
- * FadeDrawable, or if leaf rounding is specified, each leaf drawable will be rounded separately.
- * <li> A particular drawable instance should be used by only one DH. If more than one DH is being
- * built with the same builder, different drawable instances must be specified for each DH.
+ *   <li>RootDrawable and FadeDrawable are always created.
+ *   <li>All branches except the actual image branch are optional (placeholder, failure, retry,
+ *       progress bar). If some branch is not specified it won't be created. Index in FadeDrawable
+ *       will still be reserved though.
+ *   <li>If overlays and/or background are specified, they are added to the same fade drawable, and
+ *       are always being displayed.
+ *   <li>ScaleType and Matrix transformations will be added only if specified. If both are
+ *       unspecified, then the branch for that image is attached to FadeDrawable directly. Matrix
+ *       transformation is only supported for the actual image, and it is not recommended to be
+ *       used.
+ *   <li>Rounding, if specified, is applied to all layers. Rounded drawable can either wrap
+ *       FadeDrawable, or if leaf rounding is specified, each leaf drawable will be rounded
+ *       separately.
+ *   <li>A particular drawable instance should be used by only one DH. If more than one DH is being
+ *       built with the same builder, different drawable instances must be specified for each DH.
  * </ul>
  */
 public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
@@ -100,12 +102,22 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   private final ForwardingDrawable mActualImageWrapper;
 
   GenericDraweeHierarchy(GenericDraweeHierarchyBuilder builder) {
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.beginSection("GenericDraweeHierarchy()");
+    }
     mResources = builder.getResources();
     mRoundingParams = builder.getRoundingParams();
 
     mActualImageWrapper = new ForwardingDrawable(mEmptyActualImageDrawable);
 
     int numOverlays = (builder.getOverlays() != null) ? builder.getOverlays().size() : 1;
+
+    // make sure there is at least one overlay to make setOverlayImage(Drawable)
+    // method work.
+    if (numOverlays == 0) {
+      numOverlays = 1;
+    }
+
     numOverlays += (builder.getPressedStateOverlay() != null) ? 1 : 0;
 
     // layer indices and count
@@ -114,23 +126,20 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
     // array of layers
     Drawable[] layers = new Drawable[numLayers];
     layers[BACKGROUND_IMAGE_INDEX] = buildBranch(builder.getBackground(), null);
-    layers[PLACEHOLDER_IMAGE_INDEX] = buildBranch(
-        builder.getPlaceholderImage(),
-        builder.getPlaceholderImageScaleType());
-    layers[ACTUAL_IMAGE_INDEX] = buildActualImageBranch(
-        mActualImageWrapper,
-        builder.getActualImageScaleType(),
-        builder.getActualImageFocusPoint(),
-        builder.getActualImageColorFilter());
-    layers[PROGRESS_BAR_IMAGE_INDEX] = buildBranch(
-        builder.getProgressBarImage(),
-        builder.getProgressBarImageScaleType());
-    layers[RETRY_IMAGE_INDEX] = buildBranch(
-        builder.getRetryImage(),
-        builder.getRetryImageScaleType());
-    layers[FAILURE_IMAGE_INDEX] = buildBranch(
-        builder.getFailureImage(),
-        builder.getFailureImageScaleType());
+    layers[PLACEHOLDER_IMAGE_INDEX] =
+        buildBranch(builder.getPlaceholderImage(), builder.getPlaceholderImageScaleType());
+    layers[ACTUAL_IMAGE_INDEX] =
+        buildActualImageBranch(
+            mActualImageWrapper,
+            builder.getActualImageScaleType(),
+            builder.getActualImageFocusPoint(),
+            builder.getActualImageColorFilter());
+    layers[PROGRESS_BAR_IMAGE_INDEX] =
+        buildBranch(builder.getProgressBarImage(), builder.getProgressBarImageScaleType());
+    layers[RETRY_IMAGE_INDEX] =
+        buildBranch(builder.getRetryImage(), builder.getRetryImageScaleType());
+    layers[FAILURE_IMAGE_INDEX] =
+        buildBranch(builder.getFailureImage(), builder.getFailureImageScaleType());
     if (numOverlays > 0) {
       int index = 0;
       if (builder.getOverlays() != null) {
@@ -146,7 +155,7 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
     }
 
     // fade drawable composed of layers
-    mFadeDrawable = new FadeDrawable(layers);
+    mFadeDrawable = new FadeDrawable(layers, false, ACTUAL_IMAGE_INDEX);
     mFadeDrawable.setTransitionDuration(builder.getFadeDuration());
 
     // rounded corners drawable (optional)
@@ -158,12 +167,15 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
     mTopLevelDrawable.mutate();
 
     resetFade();
+    if (FrescoSystrace.isTracing()) {
+      FrescoSystrace.endSection();
+    }
   }
 
   @Nullable
   private Drawable buildActualImageBranch(
       Drawable drawable,
-      @Nullable ScaleType scaleType,
+      @Nullable ScalingUtils.ScaleType scaleType,
       @Nullable PointF focusPoint,
       @Nullable ColorFilter colorFilter) {
     drawable.setColorFilter(colorFilter);
@@ -173,7 +185,8 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
 
   /** Applies scale type and rounding (both if specified). */
   @Nullable
-  private Drawable buildBranch(@Nullable Drawable drawable, @Nullable ScaleType scaleType) {
+  private Drawable buildBranch(
+      @Nullable Drawable drawable, @Nullable ScalingUtils.ScaleType scaleType) {
     drawable = WrappingUtils.maybeApplyLeafRounding(drawable, mRoundingParams, mResources);
     drawable = WrappingUtils.maybeWrapWithScaleType(drawable, scaleType);
     return drawable;
@@ -309,15 +322,20 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
     mTopLevelDrawable.setControllerOverlay(drawable);
   }
 
+  @Override
+  public Rect getBounds() {
+    return mTopLevelDrawable.getBounds();
+  }
+
   // Helper methods for accessing layers
 
   /**
    * Gets the lowest parent drawable for the layer at the specified index.
    *
-   * Following drawables are considered as parents: FadeDrawable, MatrixDrawable, ScaleTypeDrawable.
-   * This is because those drawables are added automatically by the hierarchy (if specified),
-   * whereas their children are created externally by the client code. When we need to change the
-   * previously set drawable this is the parent whose child needs to be replaced.
+   * <p>Following drawables are considered as parents: FadeDrawable, MatrixDrawable,
+   * ScaleTypeDrawable. This is because those drawables are added automatically by the hierarchy (if
+   * specified), whereas their children are created externally by the client code. When we need to
+   * change the previously set drawable this is the parent whose child needs to be replaced.
    */
   private DrawableParent getParentDrawableAtIndex(int index) {
     DrawableParent parent = mFadeDrawable.getDrawableParentForIndex(index);
@@ -331,8 +349,8 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /**
-   * Sets the drawable at the specified index while keeping the old scale type and rounding.
-   * In case the given drawable is null, scale type gets cleared too.
+   * Sets the drawable at the specified index while keeping the old scale type and rounding. In case
+   * the given drawable is null, scale type gets cleared too.
    */
   private void setChildDrawableAtIndex(int index, @Nullable Drawable drawable) {
     if (drawable == null) {
@@ -344,23 +362,20 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /**
-   * Gets the ScaleTypeDrawable at the specified index.
-   * In case there is no child at the specified index, a NullPointerException is thrown.
-   * In case there is a child, but the ScaleTypeDrawable does not exist,
-   * the child will be wrapped with a new ScaleTypeDrawable.
+   * Gets the ScaleTypeDrawable at the specified index. In case there is no child at the specified
+   * index, a NullPointerException is thrown. In case there is a child, but the ScaleTypeDrawable
+   * does not exist, the child will be wrapped with a new ScaleTypeDrawable.
    */
   private ScaleTypeDrawable getScaleTypeDrawableAtIndex(int index) {
     DrawableParent parent = getParentDrawableAtIndex(index);
     if (parent instanceof ScaleTypeDrawable) {
       return (ScaleTypeDrawable) parent;
     } else {
-      return WrappingUtils.wrapChildWithScaleType(parent, ScaleType.FIT_XY);
+      return WrappingUtils.wrapChildWithScaleType(parent, ScalingUtils.ScaleType.FIT_XY);
     }
   }
 
-  /**
-   * Returns whether the given layer has a scale type drawable.
-   */
+  /** Returns whether the given layer has a scale type drawable. */
   private boolean hasScaleTypeDrawableAtIndex(int index) {
     DrawableParent parent = getParentDrawableAtIndex(index);
     return (parent instanceof ScaleTypeDrawable);
@@ -385,20 +400,27 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /** Sets the actual image scale type. */
-  public void setActualImageScaleType(ScaleType scaleType) {
+  public void setActualImageScaleType(ScalingUtils.ScaleType scaleType) {
     Preconditions.checkNotNull(scaleType);
     getScaleTypeDrawableAtIndex(ACTUAL_IMAGE_INDEX).setScaleType(scaleType);
   }
 
-  public @Nullable ScaleType getActualImageScaleType() {
+  public @Nullable ScalingUtils.ScaleType getActualImageScaleType() {
     if (!hasScaleTypeDrawableAtIndex(ACTUAL_IMAGE_INDEX)) {
       return null;
     }
     return getScaleTypeDrawableAtIndex(ACTUAL_IMAGE_INDEX).getScaleType();
   }
 
+  public @Nullable PointF getActualImageFocusPoint() {
+    if (!hasScaleTypeDrawableAtIndex(ACTUAL_IMAGE_INDEX)) {
+      return null;
+    }
+    return getScaleTypeDrawableAtIndex(ACTUAL_IMAGE_INDEX).getFocusPoint();
+  }
+
   /** Sets the color filter to be applied on the actual image. */
-  public void setActualImageColorFilter(ColorFilter colorfilter) {
+  public void setActualImageColorFilter(@Nullable ColorFilter colorfilter) {
     mActualImageWrapper.setColorFilter(colorfilter);
   }
 
@@ -413,7 +435,7 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /** Sets a new placeholder drawable with scale type. */
-  public void setPlaceholderImage(Drawable drawable, ScaleType scaleType) {
+  public void setPlaceholderImage(Drawable drawable, ScalingUtils.ScaleType scaleType) {
     setChildDrawableAtIndex(PLACEHOLDER_IMAGE_INDEX, drawable);
     getScaleTypeDrawableAtIndex(PLACEHOLDER_IMAGE_INDEX).setScaleType(scaleType);
   }
@@ -444,9 +466,9 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
    * Sets a new placeholder drawable with scale type.
    *
    * @param resourceId an identifier of an Android drawable or color resource.
-   * @param scaleType a new scale type.
+   * @param ScalingUtils.ScaleType a new scale type.
    */
-  public void setPlaceholderImage(int resourceId, ScaleType scaleType) {
+  public void setPlaceholderImage(int resourceId, ScalingUtils.ScaleType scaleType) {
     setPlaceholderImage(mResources.getDrawable(resourceId), scaleType);
   }
 
@@ -456,11 +478,11 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /** Sets a new failure drawable with scale type. */
-  public void setFailureImage(Drawable drawable, ScaleType scaleType) {
+  public void setFailureImage(Drawable drawable, ScalingUtils.ScaleType scaleType) {
     setChildDrawableAtIndex(FAILURE_IMAGE_INDEX, drawable);
     getScaleTypeDrawableAtIndex(FAILURE_IMAGE_INDEX).setScaleType(scaleType);
   }
-  
+
   /**
    * Sets a new failure drawable with old scale type.
    *
@@ -469,14 +491,14 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   public void setFailureImage(int resourceId) {
     setFailureImage(mResources.getDrawable(resourceId));
   }
-  
+
   /**
    * Sets a new failure drawable with scale type.
    *
    * @param resourceId an identifier of an Android drawable or color resource.
-   * @param scaleType a new scale type.
+   * @param ScalingUtils.ScaleType a new scale type.
    */
-  public void setFailureImage(int resourceId, ScaleType scaleType) {
+  public void setFailureImage(int resourceId, ScalingUtils.ScaleType scaleType) {
     setFailureImage(mResources.getDrawable(resourceId), scaleType);
   }
 
@@ -486,11 +508,11 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /** Sets a new retry drawable with scale type. */
-  public void setRetryImage(Drawable drawable, ScaleType scaleType) {
+  public void setRetryImage(Drawable drawable, ScalingUtils.ScaleType scaleType) {
     setChildDrawableAtIndex(RETRY_IMAGE_INDEX, drawable);
     getScaleTypeDrawableAtIndex(RETRY_IMAGE_INDEX).setScaleType(scaleType);
   }
-  
+
   /**
    * Sets a new retry drawable with old scale type.
    *
@@ -499,14 +521,14 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   public void setRetryImage(int resourceId) {
     setRetryImage(mResources.getDrawable(resourceId));
   }
-  
+
   /**
    * Sets a new retry drawable with scale type.
    *
    * @param resourceId an identifier of an Android drawable or color resource.
-   * @param scaleType a new scale type.
+   * @param ScalingUtils.ScaleType a new scale type.
    */
-  public void setRetryImage(int resourceId, ScaleType scaleType) {
+  public void setRetryImage(int resourceId, ScalingUtils.ScaleType scaleType) {
     setRetryImage(mResources.getDrawable(resourceId), scaleType);
   }
 
@@ -516,11 +538,11 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   }
 
   /** Sets a new progress bar drawable with scale type. */
-  public void setProgressBarImage(Drawable drawable, ScaleType scaleType) {
+  public void setProgressBarImage(Drawable drawable, ScalingUtils.ScaleType scaleType) {
     setChildDrawableAtIndex(PROGRESS_BAR_IMAGE_INDEX, drawable);
     getScaleTypeDrawableAtIndex(PROGRESS_BAR_IMAGE_INDEX).setScaleType(scaleType);
   }
-  
+
   /**
    * Sets a new progress bar drawable with old scale type.
    *
@@ -529,14 +551,14 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   public void setProgressBarImage(int resourceId) {
     setProgressBarImage(mResources.getDrawable(resourceId));
   }
-  
+
   /**
    * Sets a new progress bar drawable with scale type.
    *
    * @param resourceId an identifier of an Android drawable or color resource.
-   * @param scaleType a new scale type.
+   * @param ScalingUtils.ScaleType a new scale type.
    */
-  public void setProgressBarImage(int resourceId, ScaleType scaleType) {
+  public void setProgressBarImage(int resourceId, ScalingUtils.ScaleType scaleType) {
     setProgressBarImage(mResources.getDrawable(resourceId), scaleType);
   }
 
@@ -548,7 +570,7 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   /**
    * Sets a new overlay image at the specified index.
    *
-   * This method will throw if the given index is out of bounds.
+   * <p>This method will throw if the given index is out of bounds.
    *
    * @param drawable background image
    */
@@ -578,5 +600,14 @@ public class GenericDraweeHierarchy implements SettableDraweeHierarchy {
   @Nullable
   public RoundingParams getRoundingParams() {
     return mRoundingParams;
+  }
+
+  @VisibleForTesting
+  public boolean hasImage() {
+    return mActualImageWrapper.getDrawable() != mEmptyActualImageDrawable;
+  }
+
+  public void setOnFadeListener(OnFadeListener onFadeListener) {
+    mFadeDrawable.setOnFadeListener(onFadeListener);
   }
 }

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #ifndef _DECODED_IMAGE_H_
@@ -15,11 +13,12 @@
 
 namespace facebook {
 namespace imagepipeline {
+namespace webp {
 
 /**
  * Describes pixel formats of DecodedImage
  */
-  enum class PixelFormat {RGB, RGBA};
+enum class PixelFormat { RGB, RGBA };
 
 /**
  * Returns number of bytes per pixel for given PixelFormat
@@ -31,7 +30,7 @@ int bytesPerPixel(PixelFormat pixel_format);
 /**
  * Type of pixel buffer
  */
-typedef std::unique_ptr<uint8_t, void(*)(uint8_t*)> pixels_t;
+typedef std::unique_ptr<uint8_t, void (*)(uint8_t*)> pixels_t;
 
 /**
  * Class representing an image.
@@ -47,9 +46,11 @@ class DecodedImage {
       unsigned int width,
       unsigned int height,
       std::vector<uint8_t> metadata)
-      : pixels_(std::move(pixels)), pixelFormat_(pixelFormat),
-        width_(width), height_(height), metadata_(std::move(metadata)) {
-  }
+      : pixels_(std::move(pixels)),
+        pixelFormat_(pixelFormat),
+        width_(width),
+        height_(height),
+        metadata_(std::move(metadata)) {}
 
   // disallow copying
   DecodedImage(const DecodedImage& other) = delete;
@@ -96,6 +97,8 @@ class DecodedImage {
   const std::vector<uint8_t> metadata_;
 };
 
-} }
+} // namespace webp
+} // namespace imagepipeline
+} // namespace facebook
 
 #endif /* _DECODED_IMAGE_H_ */

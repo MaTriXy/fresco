@@ -1,17 +1,16 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.animated.base;
 
-/**
- * Builder for {@link AnimatedDrawableOptions}.
- */
+import com.facebook.infer.annotation.Nullsafe;
+
+/** Builder for {@link AnimatedDrawableOptions}. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class AnimatedDrawableOptionsBuilder {
 
   private boolean mForceKeepAllFramesInMemory;
@@ -63,8 +62,8 @@ public class AnimatedDrawableOptionsBuilder {
   /**
    * Gets the maximum bytes that the backend can use to cache image frames in memory.
    *
-   * @return maximumBytes maximum bytes that the backend can use to cache image frames in memory
-   *    or -1 to use the default
+   * @return maximumBytes maximum bytes that the backend can use to cache image frames in memory or
+   *     -1 to use the default
    */
   public int getMaximumBytes() {
     return mMaximumBytes;

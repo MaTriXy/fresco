@@ -1,14 +1,10 @@
 /*
- * This file provided by Facebook is for non-commercial testing and evaluation
- * purposes only.  Facebook reserves all rights not expressly granted.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * FACEBOOK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.samples.animation2.bitmap;
 
 import android.graphics.Bitmap;
@@ -32,40 +28,39 @@ import com.facebook.imagepipeline.core.DefaultExecutorSupplier;
 import java.util.concurrent.ExecutorService;
 import javax.annotation.Nullable;
 
-/**
- * Bitmap animation factory to create backends for the sample app.
- */
+/** Bitmap animation factory to create backends for the sample app. */
 public class ExampleBitmapAnimationFactory {
 
   private static final int NUMBER_OF_FRAMES_TO_PREPARE = 3;
 
   public static BitmapAnimationBackend createColorBitmapAnimationBackend(
-      final int[] colors,
-      final int animationDurationMs,
-      final BitmapFrameCache bitmapFrameCache) {
+      final int[] colors, final int animationDurationMs, final BitmapFrameCache bitmapFrameCache) {
     final PlatformBitmapFactory platformBitmapFactory =
         Fresco.getImagePipelineFactory().getPlatformBitmapFactory();
     final BitmapFrameRenderer bitmapFrameRenderer = new ColorAndFrameNumberRenderer(colors);
-    final AnimationInformation animationInformation = new ColorListAnimationInformation(
-        colors,
-        animationDurationMs);
-    final ExecutorService executorServiceForFramePreparer = new DefaultSerialExecutorService(
-        new DefaultExecutorSupplier(1).forDecode());
+    final AnimationInformation animationInformation =
+        new ColorListAnimationInformation(colors, animationDurationMs);
+    final ExecutorService executorServiceForFramePreparer =
+        new DefaultSerialExecutorService(new DefaultExecutorSupplier(1).forDecode());
     final BitmapFramePreparationStrategy framePreparationStrategy =
         new FixedNumberBitmapFramePreparationStrategy(NUMBER_OF_FRAMES_TO_PREPARE);
-    final BitmapFramePreparer bitmapFramePreparer = new DefaultBitmapFramePreparer(
-        platformBitmapFactory,
-        bitmapFrameRenderer,
-        Bitmap.Config.ARGB_8888,
-        executorServiceForFramePreparer);
+    final BitmapFramePreparer bitmapFramePreparer =
+        new DefaultBitmapFramePreparer(
+            platformBitmapFactory,
+            bitmapFrameRenderer,
+            Bitmap.Config.ARGB_8888,
+            executorServiceForFramePreparer);
 
-    BitmapAnimationBackend bitmapAnimationBackend = new BitmapAnimationBackend(
-        platformBitmapFactory,
-        bitmapFrameCache,
-        animationInformation,
-        bitmapFrameRenderer,
-        framePreparationStrategy,
-        bitmapFramePreparer);
+    BitmapAnimationBackend bitmapAnimationBackend =
+        new BitmapAnimationBackend(
+            platformBitmapFactory,
+            bitmapFrameCache,
+            animationInformation,
+            bitmapFrameRenderer,
+            false,
+            framePreparationStrategy,
+            bitmapFramePreparer,
+            null);
 
     bitmapAnimationBackend.setFrameListener(new DebugBitmapAnimationFrameListener());
     return bitmapAnimationBackend;
@@ -92,14 +87,27 @@ public class ExampleBitmapAnimationFactory {
     }
 
     @Override
+    public int getLoopDurationMs() {
+      return getFrameCount() * mAnimationDurationMs;
+    }
+
+    @Override
+    public int width() {
+      return -1;
+    }
+
+    @Override
+    public int height() {
+      return -1;
+    }
+
+    @Override
     public int getLoopCount() {
       return LOOP_COUNT_INFINITE;
     }
   }
 
-  /**
-   * Renderer that draws a color and the frame number on top
-   */
+  /** Renderer that draws a color and the frame number on top */
   public static class ColorAndFrameNumberRenderer implements BitmapFrameRenderer {
 
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);

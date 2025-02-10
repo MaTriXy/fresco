@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.memory;
@@ -20,9 +18,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link SharedByteArray}
- */
+/** Tests for {@link SharedByteArray} */
 @RunWith(RobolectricTestRunner.class)
 public class SharedByteArrayTest {
 
@@ -30,15 +26,10 @@ public class SharedByteArrayTest {
 
   @Before
   public void setup() {
-    mArray = new SharedByteArray(
-        mock(MemoryTrimmableRegistry.class),
-        new PoolParams(
-            Integer.MAX_VALUE,
-            Integer.MAX_VALUE,
-            null,
-            4,
-            16,
-            1));
+    mArray =
+        new SharedByteArray(
+            mock(MemoryTrimmableRegistry.class),
+            new PoolParams(Integer.MAX_VALUE, Integer.MAX_VALUE, null, 4, 16, 1));
   }
 
   @Test

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.memory;
@@ -40,10 +38,8 @@ public class PooledByteArrayBufferedInputStreamTest {
     }
     InputStream unbufferedStream = new ByteArrayInputStream(bytes);
     mBuffer = new byte[10];
-    mPooledByteArrayBufferedInputStream = new PooledByteArrayBufferedInputStream(
-        unbufferedStream,
-        mBuffer,
-        mResourceReleaser);
+    mPooledByteArrayBufferedInputStream =
+        new PooledByteArrayBufferedInputStream(unbufferedStream, mBuffer, mResourceReleaser);
   }
 
   @Test
@@ -111,7 +107,7 @@ public class PooledByteArrayBufferedInputStreamTest {
   }
 
   @Test
- public void testReadsCombined() throws IOException {
+  public void testReadsCombined() throws IOException {
     byte[] readBuffer = new byte[5];
     int i = 0;
     while (i <= 245) {
@@ -141,17 +137,15 @@ public class PooledByteArrayBufferedInputStreamTest {
    * @param endOffset
    */
   private static void assertFilledWithZeros(
-      final byte[] byteArray,
-      final int startOffset,
-      final int endOffset) {
+      final byte[] byteArray, final int startOffset, final int endOffset) {
     for (int i = startOffset; i < endOffset; ++i) {
       assertEquals(0, byteArray[i]);
     }
   }
 
   /**
-   * Given byte array, asserts that each byte in (startOffset, endOffset) range has value equal
-   * to value of previous byte plus one (mod 255) and byteArray[startOffset] is equal to firstByte.
+   * Given byte array, asserts that each byte in (startOffset, endOffset) range has value equal to
+   * value of previous byte plus one (mod 255) and byteArray[startOffset] is equal to firstByte.
    *
    * @param byteArray
    * @param startOffset
@@ -159,10 +153,7 @@ public class PooledByteArrayBufferedInputStreamTest {
    * @param firstByte
    */
   private static void assertFilledWithConsecutiveBytes(
-      final byte[] byteArray,
-      final int startOffset,
-      final int endOffset,
-      int firstByte) {
+      final byte[] byteArray, final int startOffset, final int endOffset, int firstByte) {
     for (int i = startOffset; i < endOffset; ++i) {
       assertEquals((byte) firstByte++, byteArray[i]);
     }

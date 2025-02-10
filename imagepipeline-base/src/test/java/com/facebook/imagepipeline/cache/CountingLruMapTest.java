@@ -1,17 +1,15 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.cache;
 
 import static org.junit.Assert.*;
 
-import com.android.internal.util.Predicate;
+import com.facebook.common.internal.Predicate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import org.junit.*;
@@ -27,11 +25,11 @@ public class CountingLruMapTest {
   public void setUp() {
     ValueDescriptor<Integer> valueDescriptor =
         new ValueDescriptor<Integer>() {
-      @Override
-      public int getSizeInBytes(Integer value) {
-        return value;
-      }
-    };
+          @Override
+          public int getSizeInBytes(Integer value) {
+            return value;
+          }
+        };
     mCountingLruMap = new CountingLruMap<>(valueDescriptor);
   }
 
@@ -213,13 +211,14 @@ public class CountingLruMapTest {
     mCountingLruMap.put("key3", 130);
     mCountingLruMap.put("key4", 140);
 
-    List<LinkedHashMap.Entry<String, Integer>> entries =  mCountingLruMap.getMatchingEntries(
-        new Predicate<String>() {
-          @Override
-          public boolean apply(String key) {
-            return key.equals("key2") || key.equals("key3");
-          }
-        });
+    List<LinkedHashMap.Entry<String, Integer>> entries =
+        mCountingLruMap.getMatchingEntries(
+            new Predicate<String>() {
+              @Override
+              public boolean apply(String key) {
+                return key.equals("key2") || key.equals("key3");
+              }
+            });
     assertNotNull(entries);
     assertEquals(2, entries.size());
     assertEquals("key2", entries.get(0).getKey());

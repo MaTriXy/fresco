@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.interfaces;
@@ -16,8 +14,9 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface that represents a Drawee controller used by a DraweeView.
- * <p> The view forwards events to the controller. The controller controls
- * its hierarchy based on those events.
+ *
+ * <p>The view forwards events to the controller. The controller controls its hierarchy based on
+ * those events.
  */
 @ThreadSafe
 public interface DraweeController {
@@ -30,14 +29,14 @@ public interface DraweeController {
   void setHierarchy(@Nullable DraweeHierarchy hierarchy);
 
   /**
-   * Called when the view containing the hierarchy is attached to a window
-   * (either temporarily or permanently).
+   * Called when the view containing the hierarchy is attached to a window (either temporarily or
+   * permanently).
    */
   void onAttach();
 
   /**
-   * Called when the view containing the hierarchy is detached from a window
-   * (either temporarily or permanently).
+   * Called when the view containing the hierarchy is detached from a window (either temporarily or
+   * permanently).
    */
   void onDetach();
 
@@ -49,12 +48,14 @@ public interface DraweeController {
 
   /**
    * Called when the view containing the hierarchy receives a touch event.
+   *
    * @return true if the event was handled by the controller, false otherwise
    */
   boolean onTouchEvent(MotionEvent event);
 
   /**
    * For an animated image, returns an Animatable that lets clients control the animation.
+   *
    * @return animatable, or null if the image is not animated or not loaded yet
    */
   Animatable getAnimatable();
@@ -64,7 +65,11 @@ public interface DraweeController {
 
   /**
    * Gets the accessibility content description.
+   *
    * @return content description, or null if the image has no content description
    */
   String getContentDescription();
+
+  /** Returns whether {@code other} would fetch the same image as {@code this}. */
+  boolean isSameImageRequest(DraweeController other);
 }

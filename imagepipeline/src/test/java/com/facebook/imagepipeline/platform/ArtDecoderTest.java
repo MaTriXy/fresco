@@ -1,16 +1,28 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.platform;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyObject;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.verifyStatic;
 
@@ -19,12 +31,11 @@ import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
 import android.graphics.Rect;
 import android.os.Build;
-import android.support.v4.util.Pools;
+import androidx.core.util.Pools;
 import com.facebook.common.internal.ByteStreams;
 import com.facebook.common.internal.Throwables;
 import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.references.CloseableReference;
-import com.facebook.common.soloader.SoLoaderShim;
 import com.facebook.imageformat.DefaultImageFormats;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.memory.BitmapPool;
@@ -44,7 +55,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.OngoingStubbing;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
@@ -57,17 +67,12 @@ import org.robolectric.annotation.Config;
 @RunWith(RobolectricTestRunner.class)
 @PrepareOnlyThisForTest({BitmapFactory.class, BitmapRegionDecoder.class})
 @Config(sdk = Build.VERSION_CODES.LOLLIPOP)
-@PowerMockIgnore({"org.mockito.*", "org.robolectric.*", "android.*"})
+@PowerMockIgnore({"org.mockito.*", "org.robolectric.*", "androidx.*", "android.*"})
 public class ArtDecoderTest {
 
   private static final Bitmap.Config DEFAULT_BITMAP_CONFIG = Bitmap.Config.ARGB_8888;
 
-  @Rule
-  public PowerMockRule rule = new PowerMockRule();
-
-  static {
-    SoLoaderShim.setInTestMode();
-  }
+  @Rule public PowerMockRule rule = new PowerMockRule();
 
   private static final int RANDOM_SEED = 10101;
   private static final int ENCODED_BYTES_LENGTH = 128;
@@ -94,7 +99,9 @@ public class ArtDecoderTest {
 
     mPooledByteBuffer = new TrivialPooledByteBuffer(mEncodedBytes);
     mBitmapPool = mock(BitmapPool.class);
-    mArtDecoder = new ArtDecoder(mBitmapPool, 1, new Pools.SynchronizedPool(1));
+    Pools.SynchronizedPool<ByteBuffer> pool = new Pools.SynchronizedPool<ByteBuffer>(1);
+    pool.release(ByteBuffer.allocate(16 * 1024));
+    mArtDecoder = new ArtDecoder(mBitmapPool, pool, new PlatformDecoderOptions());
 
     mByteBufferRef = CloseableReference.of(mPooledByteBuffer);
     mEncodedImage = new EncodedImage(mByteBufferRef);
@@ -102,25 +109,24 @@ public class ArtDecoderTest {
     mBitmap = MockBitmapFactory.create();
     doReturn(mBitmap).when(mBitmapPool).get(MockBitmapFactory.DEFAULT_BITMAP_SIZE);
 
-    mBitmapFactoryDefaultAnswer = new Answer<Bitmap>() {
-      @Override
-      public Bitmap answer(InvocationOnMock invocation) throws Throwable {
-        final BitmapFactory.Options options = (BitmapFactory.Options) invocation.getArguments()[2];
-        options.outWidth = MockBitmapFactory.DEFAULT_BITMAP_WIDTH;
-        options.outHeight = MockBitmapFactory.DEFAULT_BITMAP_HEIGHT;
-        verifyBitmapFactoryOptions(options);
-        return options.inJustDecodeBounds ? null : mBitmap;
-      }
-    };
+    mBitmapFactoryDefaultAnswer =
+        invocation -> {
+          final BitmapFactory.Options options =
+              (BitmapFactory.Options) invocation.getArguments()[2];
+          options.outWidth = MockBitmapFactory.DEFAULT_BITMAP_WIDTH;
+          options.outHeight = MockBitmapFactory.DEFAULT_BITMAP_HEIGHT;
+          verifyBitmapFactoryOptions(options);
+          return options.inJustDecodeBounds ? null : mBitmap;
+        };
     whenBitmapFactoryDecodeStream().thenAnswer(mBitmapFactoryDefaultAnswer);
 
     mBitmapRegionDecoder = mock(BitmapRegionDecoder.class);
-    whenBitmapRegionDecoderNewInstance().thenReturn(mBitmapRegionDecoder);
+    whenBitmapRegionDecoderNewInstance()
+        .thenAnswer((Answer<BitmapRegionDecoder>) invocation -> mBitmapRegionDecoder);
 
     ByteBuffer buf = mArtDecoder.mDecodeBuffers.acquire();
     mTempStorage = buf.array();
     mArtDecoder.mDecodeBuffers.release(buf);
-
   }
 
   @Test
@@ -152,7 +158,7 @@ public class ArtDecoderTest {
   public void testBitmapFactoryReturnsNewBitmap() {
     whenBitmapFactoryDecodeStream()
         .thenAnswer(mBitmapFactoryDefaultAnswer)
-        .thenReturn(MockBitmapFactory.create());
+        .thenAnswer((Answer<Bitmap>) invocation -> MockBitmapFactory.create());
     try {
       mArtDecoder.decodeFromEncodedImage(mEncodedImage, DEFAULT_BITMAP_CONFIG, null);
     } finally {
@@ -248,12 +254,12 @@ public class ArtDecoderTest {
     closeAndVerifyClosed(result);
   }
 
-  private byte[] getDecodedBytes() {
+  private static byte[] getDecodedBytes() {
     ArgumentCaptor<InputStream> inputStreamArgumentCaptor =
         ArgumentCaptor.forClass(InputStream.class);
-    verifyStatic(times(2));
+    verifyStatic(BitmapFactory.class, times(2));
     BitmapFactory.decodeStream(
-        inputStreamArgumentCaptor.capture(), any(Rect.class), any(BitmapFactory.Options.class));
+        inputStreamArgumentCaptor.capture(), isNull(Rect.class), any(BitmapFactory.Options.class));
     InputStream decodedStream = inputStreamArgumentCaptor.getValue();
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     try {
@@ -276,14 +282,14 @@ public class ArtDecoderTest {
     }
   }
 
-  private OngoingStubbing<Bitmap> whenBitmapFactoryDecodeStream() {
+  private static OngoingStubbing<Bitmap> whenBitmapFactoryDecodeStream() {
     mockStatic(BitmapFactory.class);
     return when(
         BitmapFactory.decodeStream(
             any(InputStream.class), isNull(Rect.class), any(BitmapFactory.Options.class)));
   }
 
-  private OngoingStubbing<BitmapRegionDecoder> whenBitmapRegionDecoderNewInstance()
+  private static OngoingStubbing<BitmapRegionDecoder> whenBitmapRegionDecoderNewInstance()
       throws IOException {
     mockStatic(BitmapRegionDecoder.class);
     return when(BitmapRegionDecoder.newInstance(any(InputStream.class), anyBoolean()));
@@ -305,23 +311,16 @@ public class ArtDecoderTest {
     assertEquals(2, mByteBufferRef.getUnderlyingReferenceTestOnly().getRefCountTestOnly());
   }
 
-  private void verifyDecodedFromStream() {
-    verifyStatic(times(2));
+  private static void verifyDecodedFromStream() {
+    verifyStatic(BitmapFactory.class, times(2));
     BitmapFactory.decodeStream(
-        any(ByteArrayInputStream.class), any(Rect.class), any(BitmapFactory.Options.class));
+        (ByteArrayInputStream) anyObject(), isNull(Rect.class), any(BitmapFactory.Options.class));
   }
 
   private void verifyDecodedBytes(boolean complete, int length) {
     byte[] decodedBytes = getDecodedBytes();
     assertArrayEquals(
-        Arrays.copyOfRange(
-            mEncodedBytes,
-            0,
-            length),
-        Arrays.copyOfRange(
-            decodedBytes,
-            0,
-            length));
+        Arrays.copyOfRange(mEncodedBytes, 0, length), Arrays.copyOfRange(decodedBytes, 0, length));
     if (complete) {
       assertEquals(length, decodedBytes.length);
     } else {

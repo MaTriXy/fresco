@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.animated.impl;
@@ -12,10 +10,11 @@ package com.facebook.imagepipeline.animated.impl;
 import android.graphics.Rect;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableBackend;
 import com.facebook.imagepipeline.animated.base.AnimatedImageResult;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
-/**
- * Assisted provider for {@link AnimatedDrawableBackend}.
- */
+/** Assisted provider for {@link AnimatedDrawableBackend}. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public interface AnimatedDrawableBackendProvider {
 
   /**
@@ -25,5 +24,5 @@ public interface AnimatedDrawableBackendProvider {
    * @param bounds the initial bounds for the drawable
    * @return a new {@link AnimatedDrawableBackend}
    */
-  AnimatedDrawableBackend get(AnimatedImageResult animatedImageResult, Rect bounds);
+  AnimatedDrawableBackend get(AnimatedImageResult animatedImageResult, @Nullable Rect bounds);
 }

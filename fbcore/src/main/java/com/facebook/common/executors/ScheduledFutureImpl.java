@@ -1,15 +1,14 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.executors;
 
 import android.os.Handler;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutionException;
@@ -20,9 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
-/**
- * A {@link ScheduledFuture} for {@link HandlerExecutorServiceImpl}.
- */
+/** A {@link ScheduledFuture} for {@link HandlerExecutorServiceImpl}. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ScheduledFutureImpl<V> implements RunnableFuture<V>, ScheduledFuture<V> {
 
   private final Handler mHandler;

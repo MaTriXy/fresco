@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2017-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.datasource;
 
 import com.facebook.common.executors.CallerThreadExecutor;
 import com.facebook.common.internal.Supplier;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -17,6 +17,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.NotThreadSafe;
 
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @NotThreadSafe
 public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
 
@@ -56,6 +57,7 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
       DataSource<T> newDataSource = (supplier != null) ? supplier.get() : null;
       synchronized (RetainingDataSource.this) {
         if (isClosed()) {
+          // NULLSAFE_FIXME[Parameter Not Nullable]
           closeSafely(newDataSource);
           return;
         } else {
@@ -66,6 +68,7 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
       if (newDataSource != null) {
         newDataSource.subscribe(new InternalDataSubscriber(), CallerThreadExecutor.getInstance());
       }
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       closeSafely(oldDataSource);
     }
 
@@ -92,17 +95,18 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
         dataSource = mDataSource;
         mDataSource = null;
       }
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       closeSafely(dataSource);
       return true;
     }
 
     private void onDataSourceNewResult(DataSource<T> dataSource) {
       if (dataSource == mDataSource) {
-        setResult(null, false);
+        setResult(null, false, dataSource.getExtras());
       }
     }
 
-    private void onDataSourceFailed(DataSource<T> dataSource) {
+    private void onDataSourceFailed() {
       // do not propagate failure
     }
 
@@ -124,13 +128,13 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
         if (dataSource.hasResult()) {
           RetainingDataSource.this.onDataSourceNewResult(dataSource);
         } else if (dataSource.isFinished()) {
-          RetainingDataSource.this.onDataSourceFailed(dataSource);
+          RetainingDataSource.this.onDataSourceFailed();
         }
       }
 
       @Override
       public void onFailure(DataSource<T> dataSource) {
-        RetainingDataSource.this.onDataSourceFailed(dataSource);
+        RetainingDataSource.this.onDataSourceFailed();
       }
 
       @Override
@@ -140,6 +144,11 @@ public class RetainingDataSourceSupplier<T> implements Supplier<DataSource<T>> {
       public void onProgressUpdate(DataSource<T> dataSource) {
         RetainingDataSource.this.onDatasourceProgress(dataSource);
       }
+    }
+
+    @Override
+    public boolean hasMultipleResults() {
+      return true;
     }
   }
 }

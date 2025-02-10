@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.view;
@@ -13,9 +11,10 @@ import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
+import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.internal.VisibleForTesting;
 import com.facebook.drawee.interfaces.DraweeHierarchy;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 
 /**
@@ -23,14 +22,16 @@ import java.util.ArrayList;
  *
  * <p>Intended for use in custom views that are showing more than one hierarchy.
  *
- * Users of this class must< call {@link Drawable#setBounds} on the top-level drawable
- * of each DraweeHierarchy in this holder. Otherwise the drawables will not be drawn.
-
- * <p>The containing view must also call {@link #onDetach()} from its
- * {@link View#onStartTemporaryDetach()} and {@link View#onDetachedFromWindow()} methods. It must
- * call {@link #onAttach} from its  {@link View#onFinishTemporaryDetach()} and
- * {@link View#onAttachedToWindow()} methods.
+ * <p>Users of this class must< call {@link Drawable#setBounds} on the top-level drawable of each
+ * DraweeHierarchy in this holder. Otherwise the drawables will not be drawn.
+ *
+ * <p>The containing view must also call {@link #onDetach()} from its {@link
+ * View#onStartTemporaryDetach()} and {@link View#onDetachedFromWindow()} methods. It must call
+ * {@link #onAttach} from its {@link View#onFinishTemporaryDetach()} and {@link
+ * View#onAttachedToWindow()} methods.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
+@Deprecated
 public class MultiDraweeHolder<DH extends DraweeHierarchy> {
 
   @VisibleForTesting boolean mIsAttached = false;

@@ -1,53 +1,52 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.util;
 
+import static com.facebook.infer.annotation.Assertions.assumeNotNull;
+
 import android.content.ContentResolver;
+import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.ContactsContract;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
+import com.facebook.common.internal.Preconditions;
+import com.facebook.infer.annotation.Nullsafe;
+import com.facebook.infer.annotation.PropagatesNullable;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.net.URL;
 import javax.annotation.Nullable;
 
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class UriUtil {
 
-  /**
-   * http scheme for URIs
-   */
+  /** http scheme for URIs */
   public static final String HTTP_SCHEME = "http";
+
   public static final String HTTPS_SCHEME = "https";
 
-  /**
-   * File scheme for URIs
-   */
+  /** File scheme for URIs */
   public static final String LOCAL_FILE_SCHEME = "file";
 
-  /**
-   * Content URI scheme for URIs
-   */
+  /** Content URI scheme for URIs */
   public static final String LOCAL_CONTENT_SCHEME = "content";
 
   /** URI prefix (including scheme) for contact photos */
   private static final Uri LOCAL_CONTACT_IMAGE_URI =
-      Uri.withAppendedPath(ContactsContract.AUTHORITY_URI, "display_photo");
+      Uri.withAppendedPath(assumeNotNull(ContactsContract.AUTHORITY_URI), "display_photo");
 
-  /**
-   * Asset scheme for URIs
-   */
+  /** Asset scheme for URIs */
   public static final String LOCAL_ASSET_SCHEME = "asset";
 
-  /**
-   * Resource scheme for URIs
-   */
+  /** Resource scheme for URIs */
   public static final String LOCAL_RESOURCE_SCHEME = "res";
 
   /**
@@ -56,9 +55,7 @@ public class UriUtil {
    */
   public static final String QUALIFIED_RESOURCE_SCHEME = ContentResolver.SCHEME_ANDROID_RESOURCE;
 
-  /**
-   * Data scheme for URIs
-   */
+  /** Data scheme for URIs */
   public static final String DATA_SCHEME = "data";
 
   /**
@@ -68,7 +65,7 @@ public class UriUtil {
    * @return url pointing to the same resource as uri
    */
   @Nullable
-  public static URL uriToUrl(@Nullable Uri uri) {
+  public static URL uriToUrl(@PropagatesNullable @Nullable Uri uri) {
     if (uri == null) {
       return null;
     }
@@ -121,9 +118,12 @@ public class UriUtil {
    * @return true if the uri is a Contact URI, and is not already specifying a display photo.
    */
   public static boolean isLocalContactUri(Uri uri) {
+    if (uri.getPath() == null) {
+      return false;
+    }
     return isLocalContentUri(uri)
         && ContactsContract.AUTHORITY.equals(uri.getAuthority())
-        && !uri.getPath().startsWith(LOCAL_CONTACT_IMAGE_URI.getPath());
+        && !uri.getPath().startsWith(assumeNotNull(LOCAL_CONTACT_IMAGE_URI.getPath()));
   }
 
   /**
@@ -171,9 +171,7 @@ public class UriUtil {
     return QUALIFIED_RESOURCE_SCHEME.equals(scheme);
   }
 
-  /**
-   * Check if the uri is a data uri
-   */
+  /** Check if the uri is a data uri */
   public static boolean isDataUri(@Nullable Uri uri) {
     return DATA_SCHEME.equals(getSchemeOrNull(uri));
   }
@@ -193,7 +191,7 @@ public class UriUtil {
    * @param uriAsString the uri as a string
    * @return the parsed Uri or null if the input was null
    */
-  public static Uri parseUriOrNull(@Nullable String uriAsString) {
+  public static @Nullable Uri parseUriOrNull(@Nullable String uriAsString) {
     return uriAsString != null ? Uri.parse(uriAsString) : null;
   }
 
@@ -207,12 +205,26 @@ public class UriUtil {
   @Nullable
   public static String getRealPathFromUri(ContentResolver contentResolver, final Uri srcUri) {
     String result = null;
-    if (isLocalContentUri(srcUri)) {
-      Cursor cursor = null;
+    Uri uri = srcUri;
+    String mimeTypeString = contentResolver.getType(uri);
+    if (isLocalContentUri(uri)) {
+      boolean isVideo = mimeTypeString != null && mimeTypeString.startsWith("video/");
+      String selection = null;
+      String[] selectionArgs = null;
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
+          && "com.android.providers.media.documents".equals(uri.getAuthority())) {
+        String documentId = DocumentsContract.getDocumentId(uri);
+        Preconditions.checkNotNull(documentId);
+        uri = Preconditions.checkNotNull(getExternalContentUri(isVideo));
+        selection = getMediaIdString(isVideo) + "=?";
+        selectionArgs = new String[] {documentId.split(":")[1]};
+      }
+      Cursor cursor =
+          contentResolver.query(
+              uri, new String[] {getDataPathString(isVideo)}, selection, selectionArgs, null);
       try {
-        cursor = contentResolver.query(srcUri, null, null, null, null);
         if (cursor != null && cursor.moveToFirst()) {
-          int idx = cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATA);
+          int idx = cursor.getColumnIndexOrThrow(getDataPathString(isVideo));
           if (idx != -1) {
             result = cursor.getString(idx);
           }
@@ -222,10 +234,45 @@ public class UriUtil {
           cursor.close();
         }
       }
-    } else if (isLocalFileUri(srcUri)) {
-      result = srcUri.getPath();
+    } else if (isLocalFileUri(uri)) {
+      result = uri.getPath();
     }
     return result;
+  }
+
+  private static Uri getExternalContentUri(boolean isVideo) {
+    return isVideo
+        ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+  }
+
+  private static String getMediaIdString(boolean isVideo) {
+    return isVideo ? MediaStore.Video.Media._ID : MediaStore.Images.Media._ID;
+  }
+
+  private static String getDataPathString(boolean isVideo) {
+    return isVideo ? MediaStore.Video.Media.DATA : MediaStore.Images.Media.DATA;
+  }
+
+  /**
+   * Gets the AssetFileDescriptor for a local file. This offers an alternative solution for opening
+   * content:// scheme files
+   *
+   * @param contentResolver the content resolver which will query for the source file
+   * @param srcUri The source uri
+   * @return The AssetFileDescriptor for the file or null if it doesn't exist
+   */
+  @Nullable
+  public static AssetFileDescriptor getAssetFileDescriptor(
+      ContentResolver contentResolver, final Uri srcUri) {
+    if (isLocalContentUri(srcUri)) {
+      try {
+        return contentResolver.openAssetFileDescriptor(srcUri, "r");
+      } catch (FileNotFoundException e) {
+        return null;
+      }
+    }
+    return null;
   }
 
   /**
@@ -239,18 +286,14 @@ public class UriUtil {
   }
 
   /**
-   * Return a URI for the given resource ID.
-   * The returned URI consists of a {@link #LOCAL_RESOURCE_SCHEME} scheme and
-   * the resource ID as path.
+   * Return a URI for the given resource ID. The returned URI consists of a {@link
+   * #LOCAL_RESOURCE_SCHEME} scheme and the resource ID as path.
    *
    * @param resourceId the resource ID to use
    * @return the URI
    */
   public static Uri getUriForResourceId(int resourceId) {
-    return new Uri.Builder()
-        .scheme(LOCAL_RESOURCE_SCHEME)
-        .path(String.valueOf(resourceId))
-        .build();
+    return new Uri.Builder().scheme(LOCAL_RESOURCE_SCHEME).path(String.valueOf(resourceId)).build();
   }
 
   /**

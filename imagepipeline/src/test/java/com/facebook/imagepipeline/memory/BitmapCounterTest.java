@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.memory;
@@ -89,13 +87,11 @@ public class BitmapCounterTest {
     assertEquals(size, mBitmapCounter.getSize());
   }
 
-  private Bitmap bitmapForSize(int size) {
+  private static Bitmap bitmapForSize(int size) {
     final Bitmap bitmap = mock(Bitmap.class);
     doReturn(1).when(bitmap).getHeight();
     doReturn(size).when(bitmap).getRowBytes();
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR1) {
-      doReturn(size).when(bitmap).getByteCount();
-    }
+    doReturn(size).when(bitmap).getByteCount();
     if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
       doReturn(size).when(bitmap).getAllocationByteCount();
     }

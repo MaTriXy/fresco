@@ -1,24 +1,34 @@
-apply plugin: 'com.android.library'
-apply plugin: 'maven'
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-project.group = GROUP
-version = VERSION_NAME
+import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
+import com.facebook.fresco.buildsrc.TestDeps
+
+apply plugin: 'com.android.library'
 
 dependencies {
-    compileOnly "javax.annotation:javax.annotation-api:${ANNOTATION_API_VERSION}"
-    compileOnly "com.google.code.findbugs:jsr305:${JSR_305_VERSION}"
+    compileOnly Deps.inferAnnotation
+    compileOnly Deps.javaxAnnotation
+    compileOnly Deps.jsr305
 
-    implementation "com.parse.bolts:bolts-tasks:${BOLTS_ANDROID_VERSION}"
+    implementation Deps.SoLoader.nativeloader
+    implementation Deps.Bolts.tasks
     implementation project(':fbcore')
     implementation project(':imagepipeline-base')
+    implementation project(':middleware')
 
-    testImplementation "junit:junit:${JUNIT_VERSION}"
+    testImplementation TestDeps.junit
 
-    androidTestImplementation "junit:junit:${JUNIT_VERSION}"
-    androidTestImplementation 'com.android.support.test:runner:0.4'
-    androidTestImplementation 'com.android.support.test:rules:0.4'
+    androidTestImplementation project(':imagepipeline')
+    androidTestImplementation TestDeps.junit
+    androidTestImplementation TestDeps.AndroidX.testRules
+    androidTestImplementation TestDeps.AndroidX.testRunner
 }
-apply from: rootProject.file('release.gradle')
 
 // We download various C++ open-source dependencies from SourceForge into nativedeps/downloads.
 // We then copy both downloaded code and our custom makefiles and headers into nativedeps/merge.
@@ -27,11 +37,19 @@ task fetchNativeDeps(dependsOn: [copyLibwebp, copyLibpng, copyLibjpeg]) {
 }
 
 android {
+    ndkVersion GradleDeps.Native.version
 
     def ndkLibs = [['static-webp', [copyLibjpeg, copyLibpng, copyLibwebp]]]
 
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
+
+    namespace "com.facebook.webpsupport"
+
+    defaultConfig {
+        minSdkVersion FrescoConfig.minSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
+    }
 
     sourceSets {
         main {
@@ -44,10 +62,12 @@ android {
         abortOnError false
     }
     ndkLibs.each { lib -> makeNdkTasks lib[0], lib[1] }
+    preBuild.dependsOn(
+        "ndk_build_static-webp",
+        "copyLibjpeg",
+        "copyLibpng",
+        "copyLibwebp"
+    )
 }
 
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-artifacts.add('archives', sourcesJar)
+apply plugin: "com.vanniktech.maven.publish"

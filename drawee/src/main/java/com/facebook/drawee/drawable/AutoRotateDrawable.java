@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.drawable;
@@ -13,12 +11,13 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import com.facebook.common.internal.Preconditions;
-import com.facebook.common.internal.VisibleForTesting;
+import com.facebook.infer.annotation.Nullsafe;
 
-/**
- * Drawable that automatically rotates underlying drawable.
- */
+/** Drawable that automatically rotates underlying drawable. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class AutoRotateDrawable extends ForwardingDrawable implements Runnable, CloneableDrawable {
   private static final int DEGREES_IN_FULL_ROTATION = 360;
   private static final int FRAME_INTERVAL_MS = 20;
@@ -29,8 +28,7 @@ public class AutoRotateDrawable extends ForwardingDrawable implements Runnable, 
   private boolean mClockwise;
 
   // Current angle by which the drawable is rotated.
-  @VisibleForTesting
-  float mRotationAngle = 0;
+  @VisibleForTesting float mRotationAngle = 0;
 
   // Whether we have our next frame scheduled for update
   private boolean mIsScheduled = false;
@@ -59,9 +57,7 @@ public class AutoRotateDrawable extends ForwardingDrawable implements Runnable, 
     mClockwise = clockwise;
   }
 
-  /**
-   * Resets to the initial state.
-   */
+  /** Resets to the initial state. */
   public void reset() {
     mRotationAngle = 0;
     mIsScheduled = false;
@@ -69,10 +65,7 @@ public class AutoRotateDrawable extends ForwardingDrawable implements Runnable, 
     invalidateSelf();
   }
 
-  /**
-   * Define whether the rotation is clockwise or not.
-   * By default is the rotation clockwise.
-   */
+  /** Define whether the rotation is clockwise or not. By default is the rotation clockwise. */
   public void setClockwise(boolean clockwise) {
     mClockwise = clockwise;
   }
@@ -104,20 +97,23 @@ public class AutoRotateDrawable extends ForwardingDrawable implements Runnable, 
   }
 
   @Override
+  @Nullable
   public AutoRotateDrawable cloneDrawable() {
     Drawable delegateCopy = DrawableUtils.cloneDrawable(getDrawable());
-    return new AutoRotateDrawable(delegateCopy, mInterval, mClockwise);
+    if (delegateCopy == null) {
+      return null;
+    } else {
+      return new AutoRotateDrawable(delegateCopy, mInterval, mClockwise);
+    }
   }
 
   /**
    * Schedule the next frame for drawing.
    *
-   * Ideally, we'd like to call this from the callback (i.e. {@code
-   * run()}), but if we do there's no place where we can call
-   * scheduleNextFrame() for the first time. As a tradeoff, we call
-   * this from draw(), which means scheduleNextFrame() could
-   * technically be called multiple times for the same frame, so we
-   * must handle that gracefully.
+   * <p>Ideally, we'd like to call this from the callback (i.e. {@code run()}), but if we do there's
+   * no place where we can call scheduleNextFrame() for the first time. As a tradeoff, we call this
+   * from draw(), which means scheduleNextFrame() could technically be called multiple times for the
+   * same frame, so we must handle that gracefully.
    */
   private void scheduleNextFrame() {
     if (!mIsScheduled) {
@@ -127,6 +123,6 @@ public class AutoRotateDrawable extends ForwardingDrawable implements Runnable, 
   }
 
   private int getIncrement() {
-    return (int) (((float)FRAME_INTERVAL_MS) / mInterval * DEGREES_IN_FULL_ROTATION);
+    return (int) (((float) FRAME_INTERVAL_MS) / mInterval * DEGREES_IN_FULL_ROTATION);
   }
 }

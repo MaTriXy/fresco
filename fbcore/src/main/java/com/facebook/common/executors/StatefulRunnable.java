@@ -1,28 +1,29 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.executors;
 
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.annotation.Nullable;
 
 /**
  * Abstraction for computation.
  *
- * <p> Computation expressed as StatefulRunnable can be cancelled, but only if it has not
- * started yet.
+ * <p>Computation expressed as StatefulRunnable can be cancelled, but only if it has not started
+ * yet.
  *
- * <p> For better decoupling of the code computing the result and the code that handles it, 4
+ * <p>For better decoupling of the code computing the result and the code that handles it, 4
  * separate methods are provided: getResult, onSuccess, onFailure and onCancellation.
  *
- * <p> This runnable can be run only once. Subsequent calls to run method won't have any effect.
+ * <p>This runnable can be run only once. Subsequent calls to run method won't have any effect.
  */
-abstract public class StatefulRunnable<T> implements Runnable {
+@Nullsafe(Nullsafe.Mode.LOCAL)
+public abstract class StatefulRunnable<T> implements Runnable {
   protected static final int STATE_CREATED = 0;
   protected static final int STATE_STARTED = 1;
   protected static final int STATE_CANCELLED = 2;
@@ -65,26 +66,27 @@ abstract public class StatefulRunnable<T> implements Runnable {
 
   /**
    * Called after computing result successfully.
+   *
    * @param result
    */
-  protected void onSuccess(T result) {}
+  protected void onSuccess(@Nullable T result) {}
 
   /**
    * Called if exception occurred during computation.
+   *
    * @param e
    */
   protected void onFailure(Exception e) {}
 
-  /**
-   * Called when the runnable is cancelled.
-   */
+  /** Called when the runnable is cancelled. */
   protected void onCancellation() {}
 
   /**
    * Called after onSuccess callback completes in order to dispose the result.
+   *
    * @param result
    */
-  protected void disposeResult(T result) {}
+  protected void disposeResult(@Nullable T result) {}
 
-  abstract protected T getResult() throws Exception;
+  protected abstract @Nullable T getResult() throws Exception;
 }

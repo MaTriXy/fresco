@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.animated.testing;
@@ -16,10 +14,11 @@ import com.facebook.common.references.CloseableReference;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableBackend;
 import com.facebook.imagepipeline.animated.base.AnimatedDrawableFrameInfo;
 import com.facebook.imagepipeline.animated.base.AnimatedImageResult;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
-/**
- * Implementation of {@link AnimatedDrawableBackend} for unit tests.
- */
+/** Implementation of {@link AnimatedDrawableBackend} for unit tests. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class TestAnimatedDrawableBackend implements AnimatedDrawableBackend {
 
   private final int mWidth;
@@ -45,7 +44,9 @@ public class TestAnimatedDrawableBackend implements AnimatedDrawableBackend {
     return ((frameNumber & 0xff) << 16) | ((x & 0xff) << 8) | ((y & 0xff));
   }
 
+  @Nullable
   @Override
+  // NULLSAFE_FIXME[Inconsistent Subclass Return Annotation]
   public AnimatedImageResult getAnimatedImageResult() {
     return null;
   }
@@ -111,6 +112,11 @@ public class TestAnimatedDrawableBackend implements AnimatedDrawableBackend {
   }
 
   @Override
+  public void renderDeltas(int frameNumber, Canvas canvas) {
+    renderFrame(frameNumber, canvas);
+  }
+
+  @Override
   public int getFrameForTimestampMs(int timestampMs) {
     int accumulator = 0;
     for (int i = 0; i < mFrameDurations.length; i++) {
@@ -138,7 +144,7 @@ public class TestAnimatedDrawableBackend implements AnimatedDrawableBackend {
   }
 
   @Override
-  public AnimatedDrawableBackend forNewBounds(Rect bounds) {
+  public AnimatedDrawableBackend forNewBounds(@Nullable Rect bounds) {
     return this;
   }
 
@@ -147,6 +153,7 @@ public class TestAnimatedDrawableBackend implements AnimatedDrawableBackend {
     return 0;
   }
 
+  @Nullable
   @Override
   public CloseableReference<Bitmap> getPreDecodedFrame(int frameNumber) {
     return null;

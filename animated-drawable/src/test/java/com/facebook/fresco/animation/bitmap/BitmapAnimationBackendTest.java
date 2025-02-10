@@ -1,18 +1,17 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.fresco.animation.bitmap;
 
-import static org.fest.assertions.api.Assertions.assertThat;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -39,9 +38,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests {@link BitmapAnimationBackend}
- */
+/** Tests {@link BitmapAnimationBackend} */
 @RunWith(RobolectricTestRunner.class)
 public class BitmapAnimationBackendTest {
 
@@ -68,13 +65,16 @@ public class BitmapAnimationBackendTest {
   public void setup() {
     MockitoAnnotations.initMocks(this);
     mBitmapRefererence = CloseableReference.of(mBitmap, mBitmapResourceReleaser);
-    mBitmapAnimationBackend = new BitmapAnimationBackend(
-        mPlatformBitmapFactory,
-        mBitmapFrameCache,
-        mAnimationInformation,
-        mBitmapFrameRenderer,
-        mBitmapFramePreparationStrategy,
-        mBitmapFramePreparer);
+    mBitmapAnimationBackend =
+        new BitmapAnimationBackend(
+            mPlatformBitmapFactory,
+            mBitmapFrameCache,
+            mAnimationInformation,
+            mBitmapFrameRenderer,
+            false /* isNewRenderImplementation */,
+            mBitmapFramePreparationStrategy,
+            mBitmapFramePreparer,
+            null);
     mBitmapAnimationBackend.setFrameListener(mFrameListener);
   }
 
@@ -91,10 +91,7 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     int backendIntrinsicHeight = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(mBounds);
 
@@ -109,10 +106,7 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = 260;
     int backendIntrinsicHeight = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(mBounds);
 
@@ -127,10 +121,7 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     int backendIntrinsicHeight = 260;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(mBounds);
 
@@ -145,10 +136,7 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = 260;
     int backendIntrinsicHeight = 300;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(mBounds);
 
@@ -163,10 +151,7 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     int backendIntrinsicHeight = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(null);
 
@@ -183,17 +168,12 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = 260;
     int backendIntrinsicHeight = 300;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(null);
 
-    assertThat(mBitmapAnimationBackend.getIntrinsicWidth())
-        .isEqualTo(backendIntrinsicWidth);
-    assertThat(mBitmapAnimationBackend.getIntrinsicHeight())
-        .isEqualTo(backendIntrinsicHeight);
+    assertThat(mBitmapAnimationBackend.getIntrinsicWidth()).isEqualTo(backendIntrinsicWidth);
+    assertThat(mBitmapAnimationBackend.getIntrinsicHeight()).isEqualTo(backendIntrinsicHeight);
   }
 
   @Test
@@ -203,17 +183,12 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = 260;
     int backendIntrinsicHeight = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(null);
 
-    assertThat(mBitmapAnimationBackend.getIntrinsicWidth())
-        .isEqualTo(backendIntrinsicWidth);
-    assertThat(mBitmapAnimationBackend.getIntrinsicHeight())
-        .isEqualTo(backendIntrinsicHeight);
+    assertThat(mBitmapAnimationBackend.getIntrinsicWidth()).isEqualTo(backendIntrinsicWidth);
+    assertThat(mBitmapAnimationBackend.getIntrinsicHeight()).isEqualTo(backendIntrinsicHeight);
   }
 
   @Test
@@ -223,17 +198,12 @@ public class BitmapAnimationBackendTest {
     int backendIntrinsicWidth = AnimationBackend.INTRINSIC_DIMENSION_UNSET;
     int backendIntrinsicHeight = 400;
     setupBoundsAndRendererDimensions(
-        boundsWidth,
-        boundsHeight,
-        backendIntrinsicWidth,
-        backendIntrinsicHeight);
+        boundsWidth, boundsHeight, backendIntrinsicWidth, backendIntrinsicHeight);
 
     mBitmapAnimationBackend.setBounds(null);
 
-    assertThat(mBitmapAnimationBackend.getIntrinsicWidth())
-        .isEqualTo(backendIntrinsicWidth);
-    assertThat(mBitmapAnimationBackend.getIntrinsicHeight())
-        .isEqualTo(backendIntrinsicHeight);
+    assertThat(mBitmapAnimationBackend.getIntrinsicWidth()).isEqualTo(backendIntrinsicWidth);
+    assertThat(mBitmapAnimationBackend.getIntrinsicHeight()).isEqualTo(backendIntrinsicHeight);
   }
 
   @Test
@@ -257,16 +227,13 @@ public class BitmapAnimationBackendTest {
     when(mAnimationInformation.getFrameDurationMs(1)).thenReturn(50);
     when(mAnimationInformation.getFrameDurationMs(2)).thenReturn(100);
 
-    assertThat(mBitmapAnimationBackend.getFrameDurationMs(1))
-        .isEqualTo(50);
-    assertThat(mBitmapAnimationBackend.getFrameDurationMs(2))
-        .isEqualTo(100);
+    assertThat(mBitmapAnimationBackend.getFrameDurationMs(1)).isEqualTo(50);
+    assertThat(mBitmapAnimationBackend.getFrameDurationMs(2)).isEqualTo(100);
   }
 
   @Test
   public void testDrawCachedBitmap() {
-    when(mBitmapFrameCache.getCachedFrame(anyInt()))
-        .thenReturn(mBitmapRefererence);
+    when(mBitmapFrameCache.getCachedFrame(anyInt())).thenReturn(mBitmapRefererence);
 
     mBitmapAnimationBackend.drawFrame(mParentDrawable, mCanvas, 1);
 
@@ -399,26 +366,20 @@ public class BitmapAnimationBackendTest {
     verify(mBitmapFrameCache).getFallbackFrame(4);
     verifyNoMoreInteractions(mCanvas, mBitmapFrameCache);
     verifyFramePreparationStrategyCalled(4);
-    verify(mFrameListener)
-        .onFrameDropped(mBitmapAnimationBackend, 4);
+    verify(mFrameListener).onFrameDropped(mBitmapAnimationBackend, 4);
   }
 
   private void verifyFramePreparationStrategyCalled(int frameNumber) {
-    verify(mBitmapFramePreparationStrategy).prepareFrames(
-        mBitmapFramePreparer,
-        mBitmapFrameCache,
-        mBitmapAnimationBackend,
-        frameNumber);
+    verify(mBitmapFramePreparationStrategy)
+        .prepareFrames(
+            mBitmapFramePreparer, mBitmapFrameCache, mBitmapAnimationBackend, frameNumber, null);
   }
 
   private void verifyListenersAndCacheNotified(
-      int frameNumber,
-      @BitmapAnimationBackend.FrameType int frameType) {
+      int frameNumber, @BitmapAnimationBackend.FrameType int frameType) {
     // Verify cache callback
-    verify(mBitmapFrameCache).onFrameRendered(
-        eq(frameNumber),
-        mCapturedBitmapReference.capture(),
-        eq(frameType));
+    verify(mBitmapFrameCache)
+        .onFrameRendered(eq(frameNumber), mCapturedBitmapReference.capture(), eq(frameType));
     assertThat(mCapturedBitmapReference.getValue()).isEqualTo(mBitmapRefererence);
 
     // Verify frame listener
@@ -426,13 +387,10 @@ public class BitmapAnimationBackendTest {
   }
 
   private void verifyListenersNotifiedWithoutCache(
-      int frameNumber,
-      @BitmapAnimationBackend.FrameType int frameType) {
+      int frameNumber, @BitmapAnimationBackend.FrameType int frameType) {
     // Verify cache callback
-    verify(mBitmapFrameCache, never()).onFrameRendered(
-        anyInt(),
-        mCapturedBitmapReference.capture(),
-        eq(frameType));
+    verify(mBitmapFrameCache, never())
+        .onFrameRendered(anyInt(), mCapturedBitmapReference.capture(), eq(frameType));
 
     // Verify frame listener
     verify(mFrameListener).onFrameDrawn(mBitmapAnimationBackend, frameNumber, frameType);
@@ -443,16 +401,11 @@ public class BitmapAnimationBackendTest {
   }
 
   private void setupBoundsAndRendererDimensions(
-      int boundsWidth,
-      int boundsHeight,
-      int backendIntrinsicWidth,
-      int backendIntrinsicHeight) {
+      int boundsWidth, int boundsHeight, int backendIntrinsicWidth, int backendIntrinsicHeight) {
     when(mBounds.width()).thenReturn(boundsWidth);
     when(mBounds.height()).thenReturn(boundsHeight);
 
-    when(mBitmapFrameRenderer.getIntrinsicWidth())
-        .thenReturn(backendIntrinsicWidth);
-    when(mBitmapFrameRenderer.getIntrinsicHeight())
-        .thenReturn(backendIntrinsicHeight);
+    when(mBitmapFrameRenderer.getIntrinsicWidth()).thenReturn(backendIntrinsicWidth);
+    when(mBitmapFrameRenderer.getIntrinsicHeight()).thenReturn(backendIntrinsicHeight);
   }
 }

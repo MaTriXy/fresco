@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.cache.disk;
@@ -23,9 +21,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 
-/**
- * Test out methods in DynamicDefaultDiskStorage
- */
+/** Test out methods in DynamicDefaultDiskStorage */
 @RunWith(RobolectricTestRunner.class)
 public class DynamicDefaultDiskStorageTest {
 
@@ -45,9 +41,9 @@ public class DynamicDefaultDiskStorageTest {
   private DynamicDefaultDiskStorage createStorage(boolean useFilesDirInsteadOfCacheDir) {
     return new DynamicDefaultDiskStorage(
         mVersion,
-        useFilesDirInsteadOfCacheDir ?
-            Suppliers.of(mContext.getFilesDir()) :
-            Suppliers.of(mContext.getCacheDir()),
+        useFilesDirInsteadOfCacheDir
+            ? Suppliers.of(mContext.getFilesDir())
+            : Suppliers.of(mContext.getCacheDir()),
         mBaseDirectoryName,
         mCacheErrorLogger);
   }
@@ -170,9 +166,8 @@ public class DynamicDefaultDiskStorageTest {
     storage.deleteOldStorageIfNecessary();
 
     storage.get();
-    File versionDir = getStorageSubdirectory(
-        new File(mContext.getCacheDir(), mBaseDirectoryName),
-        mVersion);
+    File versionDir =
+        getStorageSubdirectory(new File(mContext.getCacheDir(), mBaseDirectoryName), mVersion);
     Assert.assertTrue(versionDir.exists());
     File dummyFile = new File(versionDir, "dummy");
     Assert.assertTrue(dummyFile.createNewFile());
@@ -188,9 +183,7 @@ public class DynamicDefaultDiskStorageTest {
     DynamicDefaultDiskStorage storage = createInternalCacheDirStorage();
 
     File baseDir = new File(mContext.getCacheDir(), mBaseDirectoryName);
-    File versionDir = getStorageSubdirectory(
-        baseDir,
-        mVersion);
+    File versionDir = getStorageSubdirectory(baseDir, mVersion);
 
     Assert.assertFalse(versionDir.exists());
     Assert.assertFalse(baseDir.exists());

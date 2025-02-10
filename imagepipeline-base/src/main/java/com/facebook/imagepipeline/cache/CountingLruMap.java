@@ -1,32 +1,33 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.imagepipeline.cache;
 
-import com.android.internal.util.Predicate;
-import com.facebook.common.internal.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+import com.facebook.common.internal.Predicate;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
-/**
- * Map that keeps track of the elements order (according to the LRU policy) and their size.
- */
+/** Map that keeps track of the elements order (according to the LRU policy) and their size. */
 @ThreadSafe
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class CountingLruMap<K, V> {
 
   private final ValueDescriptor<V> mValueDescriptor;
 
   @GuardedBy("this")
   private final LinkedHashMap<K, V> mMap = new LinkedHashMap<>();
+
   @GuardedBy("this")
   private int mSizeInBytes = 0;
 
@@ -61,10 +62,10 @@ public class CountingLruMap<K, V> {
   }
 
   /** Gets the all matching elements. */
-  public synchronized ArrayList<LinkedHashMap.Entry<K, V>> getMatchingEntries(
+  public synchronized ArrayList<Map.Entry<K, V>> getMatchingEntries(
       @Nullable Predicate<K> predicate) {
-    ArrayList<LinkedHashMap.Entry<K, V>> matchingEntries = new ArrayList<>(mMap.entrySet().size());
-    for (LinkedHashMap.Entry<K, V> entry : mMap.entrySet()) {
+    ArrayList<Map.Entry<K, V>> matchingEntries = new ArrayList<>(mMap.entrySet().size());
+    for (Map.Entry<K, V> entry : mMap.entrySet()) {
       if (predicate == null || predicate.apply(entry.getKey())) {
         matchingEntries.add(entry);
       }
@@ -72,7 +73,7 @@ public class CountingLruMap<K, V> {
     return matchingEntries;
   }
 
-  /** Returns whether the map contains an element with the given key.  */
+  /** Returns whether the map contains an element with the given key. */
   public synchronized boolean contains(K key) {
     return mMap.containsKey(key);
   }
@@ -98,17 +99,17 @@ public class CountingLruMap<K, V> {
   /** Removes the element from the map. */
   @Nullable
   public synchronized V remove(K key) {
-      V oldValue = mMap.remove(key);
-      mSizeInBytes -= getValueSizeInBytes(oldValue);
-      return oldValue;
+    V oldValue = mMap.remove(key);
+    mSizeInBytes -= getValueSizeInBytes(oldValue);
+    return oldValue;
   }
 
   /** Removes all the matching elements from the map. */
   public synchronized ArrayList<V> removeAll(@Nullable Predicate<K> predicate) {
     ArrayList<V> oldValues = new ArrayList<>();
-    Iterator<LinkedHashMap.Entry<K, V>> iterator = mMap.entrySet().iterator();
+    Iterator<Map.Entry<K, V>> iterator = mMap.entrySet().iterator();
     while (iterator.hasNext()) {
-      LinkedHashMap.Entry<K, V> entry = iterator.next();
+      Map.Entry<K, V> entry = iterator.next();
       if (predicate == null || predicate.apply(entry.getKey())) {
         oldValues.add(entry.getValue());
         mSizeInBytes -= getValueSizeInBytes(entry.getValue());
@@ -126,7 +127,13 @@ public class CountingLruMap<K, V> {
     return oldValues;
   }
 
-  private int getValueSizeInBytes(V value) {
+  public synchronized void resetSize() {
+    if (mMap.isEmpty()) {
+      mSizeInBytes = 0;
+    }
+  }
+
+  private int getValueSizeInBytes(@Nullable V value) {
     return (value == null) ? 0 : mValueDescriptor.getSizeInBytes(value);
   }
 }

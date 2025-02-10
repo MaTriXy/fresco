@@ -1,28 +1,23 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.decoder;
 
 import com.facebook.imagepipeline.image.QualityInfo;
 
-/**
- * Progressive JPEG config.
- */
+/** Progressive JPEG config. */
 public interface ProgressiveJpegConfig {
 
-  /**
-   * Gets the next scan-number that should be decoded after the given scan-number.
-   */
+  /** Shortcut for checking if we should attempt to decode progressively. */
+  boolean decodeProgressively();
+
+  /** Gets the next scan-number that should be decoded after the given scan-number. */
   int getNextScanNumberToDecode(int scanNumber);
 
-  /**
-   * Gets the quality information for the given scan-number.
-   */
+  /** Gets the quality information for the given scan-number. */
   QualityInfo getQualityInfo(int scanNumber);
 }

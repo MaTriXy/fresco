@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.debug;
@@ -14,14 +12,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
-import robolectric3.shadows.ShadowMatrix;
 
 /**
  * Test cases for {@link DebugControllerOverlayDrawable} that are not included in the gradle build
  * as they depend on a working `ShadowMatrix` implementation.
  */
-@Config(shadows = {ShadowMatrix.class})
 @RunWith(RobolectricTestRunner.class)
 public class DebugControllerOverlayDrawableInternalTest {
 

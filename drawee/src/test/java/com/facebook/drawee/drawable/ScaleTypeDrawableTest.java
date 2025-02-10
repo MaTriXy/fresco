@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.drawable;
@@ -21,6 +19,7 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import javax.annotation.Nullable;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -215,8 +214,8 @@ public class ScaleTypeDrawableTest {
 
   /**
    * Underlying drawable's aspect ratio is smaller than view's, so it has to be slided vertically
-   * after scaling. Focus point is too much top, so it cannot be completely centered. Top-most
-   * part of the image is displayed.
+   * after scaling. Focus point is too much top, so it cannot be completely centered. Top-most part
+   * of the image is displayed.
    */
   @Test
   public void testConfigureBounds_FOCUS_CROP_VT() {
@@ -285,7 +284,7 @@ public class ScaleTypeDrawableTest {
       int underlyingWidth,
       int underlyingHeight,
       ScaleType scaleType,
-      PointF focusPoint,
+      @Nullable PointF focusPoint,
       Matrix expectedMatrix) {
     mScaleTypeDrawable.setScaleType(scaleType);
     if (focusPoint != null) {
@@ -305,8 +304,8 @@ public class ScaleTypeDrawableTest {
 
   private void testActualImageBounds(RectF expectedActualImageBounds) {
     // TODO(5469563): enable this once we have a decent implementation of ShadowMatrix
-    //RectF actualImageBounds = new RectF();
-    //mScaleTypeDrawable.getTransformedBounds(actualImageBounds);
-    //Assert.assertEquals(expectedActualImageBounds, actualImageBounds);
+    // RectF actualImageBounds = new RectF();
+    // mScaleTypeDrawable.getTransformedBounds(actualImageBounds);
+    // Assert.assertEquals(expectedActualImageBounds, actualImageBounds);
   }
 }

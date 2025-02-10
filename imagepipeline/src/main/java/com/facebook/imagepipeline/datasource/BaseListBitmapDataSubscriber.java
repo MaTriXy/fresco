@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.datasource;
@@ -16,16 +14,16 @@ import com.facebook.datasource.DataSource;
 import com.facebook.datasource.DataSubscriber;
 import com.facebook.imagepipeline.image.CloseableBitmap;
 import com.facebook.imagepipeline.image.CloseableImage;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /**
- * Implementation of {@link DataSubscriber} for cases where the client wants to access
- * a list of bitmaps.
+ * Implementation of {@link DataSubscriber} for cases where the client wants to access a list of
+ * bitmaps.
  *
- * <p>
- * Sample usage:
- * <code>
+ * <p>Sample usage: <code>
  *   dataSource.subscribe(
  *     new BaseListBitmapDataSubscriber() {
  *       @Override
@@ -42,8 +40,9 @@ import java.util.List;
  *     }
  * </code>
  */
-public abstract class BaseListBitmapDataSubscriber extends
-    BaseDataSubscriber<List<CloseableReference<CloseableImage>>> {
+@Nullsafe(Nullsafe.Mode.LOCAL)
+public abstract class BaseListBitmapDataSubscriber
+    extends BaseDataSubscriber<List<CloseableReference<CloseableImage>>> {
 
   @Override
   public void onNewResultImpl(DataSource<List<CloseableReference<CloseableImage>>> dataSource) {
@@ -57,17 +56,17 @@ public abstract class BaseListBitmapDataSubscriber extends
     }
     try {
       List<Bitmap> bitmapList = new ArrayList<>(imageRefList.size());
-      for (CloseableReference<CloseableImage> closeableImageRef: imageRefList) {
+      for (CloseableReference<CloseableImage> closeableImageRef : imageRefList) {
         if (closeableImageRef != null && closeableImageRef.get() instanceof CloseableBitmap) {
           bitmapList.add(((CloseableBitmap) closeableImageRef.get()).getUnderlyingBitmap());
         } else {
-          //This is so that client gets list with same length
+          // This is so that client gets list with same length
           bitmapList.add(null);
         }
       }
       onNewResultListImpl(bitmapList);
     } finally {
-      for (CloseableReference<CloseableImage> closeableImageRef: imageRefList) {
+      for (CloseableReference<CloseableImage> closeableImageRef : imageRefList) {
         CloseableReference.closeSafely(closeableImageRef);
       }
     }
@@ -78,7 +77,8 @@ public abstract class BaseListBitmapDataSubscriber extends
    * method. This list can be null or the elements in it can be null.
    *
    * <p>The framework will free the bitmaps in the list from memory after this method has completed.
+   *
    * @param bitmapList
    */
-  protected abstract void onNewResultListImpl(List<Bitmap> bitmapList);
+  protected abstract void onNewResultListImpl(@Nullable List<Bitmap> bitmapList);
 }

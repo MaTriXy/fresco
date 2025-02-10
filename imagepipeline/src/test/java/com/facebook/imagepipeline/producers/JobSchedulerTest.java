@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
@@ -44,15 +42,18 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
-@PowerMockIgnore({ "org.mockito.*", "org.robolectric.*", "android.*" })
-@Config(manifest= Config.NONE)
-@PrepareForTest({SystemClock.class, JobScheduler.JobStartExecutorSupplier.class})
+@PowerMockIgnore({"org.mockito.*", "org.robolectric.*", "androidx.*", "android.*"})
+@Config(manifest = Config.NONE)
+@PrepareForTest({
+  SystemClock.class,
+  JobScheduler.class,
+  JobScheduler.JobStartExecutorSupplier.class
+})
 public class JobSchedulerTest {
 
   private static final int INTERVAL = 100;
 
-  @Rule
-  public PowerMockRule rule = new PowerMockRule();
+  @Rule public PowerMockRule rule = new PowerMockRule();
 
   private static class TestJobRunnable implements JobScheduler.JobRunnable {
 
@@ -105,18 +106,21 @@ public class JobSchedulerTest {
     mFakeClockForWorker.incrementBy(1000);
     mFakeClockForScheduled.incrementBy(1000);
     PowerMockito.mockStatic(SystemClock.class);
-    when(SystemClock.uptimeMillis()).thenAnswer(
-        new Answer<Long>() {
-          @Override
-          public Long answer(InvocationOnMock invocation) throws Throwable {
-            return mFakeClockForTime.now();
-          }
-        });
+    when(SystemClock.uptimeMillis())
+        .thenAnswer(
+            new Answer<Long>() {
+              @Override
+              public Long answer(InvocationOnMock invocation) throws Throwable {
+                return mFakeClockForTime.now();
+              }
+            });
 
     mTestExecutorService = new TestExecutorService(mFakeClockForWorker);
     mTestScheduledExecutorService = new TestScheduledExecutorService(mFakeClockForScheduled);
     PowerMockito.mockStatic(JobScheduler.JobStartExecutorSupplier.class);
-    when(JobScheduler.JobStartExecutorSupplier.get()).thenReturn(mTestScheduledExecutorService);
+    when(JobScheduler.JobStartExecutorSupplier.get())
+        .thenAnswer(
+            (Answer<TestScheduledExecutorService>) invocation -> mTestScheduledExecutorService);
 
     mTestJobRunnable = new TestJobRunnable();
     mJobScheduler = new JobScheduler(mTestExecutorService, mTestJobRunnable, INTERVAL);
@@ -289,29 +293,30 @@ public class JobSchedulerTest {
     final EncodedImage encodedImage2 = fakeEncodedImage();
     final EncodedImage encodedImage3 = fakeEncodedImage();
 
-    Executors.newFixedThreadPool(1).execute(
-        new Runnable() {
-          @Override
-          public void run() {
-            // wait until the job starts running
-            waitForCondition(mTestJobRunnable.running, true);
-            assertEquals(0, mTestScheduledExecutorService.getPendingCount());
-            assertEquals(0, mTestExecutorService.getPendingCount());
-            assertEquals(0, mTestJobRunnable.jobs.size());
+    Executors.newFixedThreadPool(1)
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                // wait until the job starts running
+                waitForCondition(mTestJobRunnable.running, true);
+                assertEquals(0, mTestScheduledExecutorService.getPendingCount());
+                assertEquals(0, mTestExecutorService.getPendingCount());
+                assertEquals(0, mTestJobRunnable.jobs.size());
 
-            mJobScheduler.updateJob(encodedImage2, Consumer.IS_LAST);
-            assertEquals(JobScheduler.JobState.RUNNING, mJobScheduler.mJobState);
-            assertTrue(mJobScheduler.scheduleJob());
-            assertEquals(JobScheduler.JobState.RUNNING_AND_PENDING, mJobScheduler.mJobState);
+                mJobScheduler.updateJob(encodedImage2, Consumer.IS_LAST);
+                assertEquals(JobScheduler.JobState.RUNNING, mJobScheduler.mJobState);
+                assertTrue(mJobScheduler.scheduleJob());
+                assertEquals(JobScheduler.JobState.RUNNING_AND_PENDING, mJobScheduler.mJobState);
 
-            mJobScheduler.updateJob(encodedImage3, Consumer.IS_LAST);
-            assertEquals(JobScheduler.JobState.RUNNING_AND_PENDING, mJobScheduler.mJobState);
-            assertTrue(mJobScheduler.scheduleJob());
+                mJobScheduler.updateJob(encodedImage3, Consumer.IS_LAST);
+                assertEquals(JobScheduler.JobState.RUNNING_AND_PENDING, mJobScheduler.mJobState);
+                assertTrue(mJobScheduler.scheduleJob());
 
-            assertEquals(JobScheduler.JobState.RUNNING_AND_PENDING, mJobScheduler.mJobState);
-            mTestJobRunnable.wait.set(false);
-          }
-        });
+                assertEquals(JobScheduler.JobState.RUNNING_AND_PENDING, mJobScheduler.mJobState);
+                mTestJobRunnable.wait.set(false);
+              }
+            });
 
     // block running until the above code executed on another thread finishes
     mTestJobRunnable.wait.set(true);
@@ -393,9 +398,7 @@ public class JobSchedulerTest {
   }
 
   private static void assertJobsEqual(
-      TestJobRunnable.Job job,
-      EncodedImage encodedImage,
-      @Consumer.Status int status) {
+      TestJobRunnable.Job job, EncodedImage encodedImage, @Consumer.Status int status) {
     assertReferencesEqual(encodedImage, job.encodedImage);
     assertEquals(status, job.status);
   }

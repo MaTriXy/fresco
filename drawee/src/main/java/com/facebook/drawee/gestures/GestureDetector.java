@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.gestures;
@@ -12,19 +10,23 @@ package com.facebook.drawee.gestures;
 import android.content.Context;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
-import com.facebook.common.internal.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
 /**
  * Gesture detector based on touch events.
- * <p>
- * This class allows us to get click events when we need them, but not to consume them when we are
- * temporarily not interested in them. Doing {@code View.setClickable(true)} will cause for the
+ *
+ * <p>This class allows us to get click events when we need them, but not to consume them when we
+ * are temporarily not interested in them. Doing {@code View.setClickable(true)} will cause for the
  * view always to consume click event, even if {@code View.performClick} is overridden to return
  * false. That means even though our view didn't handle the click event, the event will not get
  * propagated upwards. Result of {@code View.onTouchEvent} is handled correctly though so we use
  * that instead.
- * <p> This class currently only detects clicks.
+ *
+ * <p>This class currently only detects clicks.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class GestureDetector {
 
   /** Interface for the click listener. */
@@ -32,7 +34,7 @@ public class GestureDetector {
     public boolean onClick();
   }
 
-  @VisibleForTesting ClickListener mClickListener;
+  @VisibleForTesting @Nullable ClickListener mClickListener;
 
   @VisibleForTesting final float mSingleTapSlopPx;
   @VisibleForTesting boolean mIsCapturingGesture;
@@ -60,7 +62,8 @@ public class GestureDetector {
 
   /**
    * Resets component.
-   * <p> This will drop any gesture recognition that might currently be in progress.
+   *
+   * <p>This will drop any gesture recognition that might currently be in progress.
    */
   public void reset() {
     mIsCapturingGesture = false;
@@ -88,8 +91,8 @@ public class GestureDetector {
         mActionDownY = event.getY();
         break;
       case MotionEvent.ACTION_MOVE:
-        if (Math.abs(event.getX() - mActionDownX) > mSingleTapSlopPx ||
-            Math.abs(event.getY() - mActionDownY) > mSingleTapSlopPx) {
+        if (Math.abs(event.getX() - mActionDownX) > mSingleTapSlopPx
+            || Math.abs(event.getY() - mActionDownY) > mSingleTapSlopPx) {
           mIsClickCandidate = false;
         }
         break;
@@ -99,8 +102,8 @@ public class GestureDetector {
         break;
       case MotionEvent.ACTION_UP:
         mIsCapturingGesture = false;
-        if (Math.abs(event.getX() - mActionDownX) > mSingleTapSlopPx ||
-            Math.abs(event.getY() - mActionDownY) > mSingleTapSlopPx) {
+        if (Math.abs(event.getX() - mActionDownX) > mSingleTapSlopPx
+            || Math.abs(event.getY() - mActionDownY) > mSingleTapSlopPx) {
           mIsClickCandidate = false;
         }
         if (mIsClickCandidate) {
@@ -117,5 +120,4 @@ public class GestureDetector {
     }
     return true;
   }
-
 }

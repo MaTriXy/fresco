@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.references;
@@ -12,21 +10,18 @@ package com.facebook.common.references;
 import com.facebook.common.internal.Closeables;
 import java.io.Closeable;
 import java.io.IOException;
+import javax.annotation.Nullable;
 import junit.framework.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Basic tests for shared references
- */
+/** Basic tests for shared references */
 @RunWith(RobolectricTestRunner.class)
 public class SharedReferenceTest {
 
-  /**
-   * Tests out the basic operations (isn't everything a basic operation?)
-   */
+  /** Tests out the basic operations (isn't everything a basic operation?) */
   @Test
   public void testBasic() {
 
@@ -97,7 +92,7 @@ public class SharedReferenceTest {
   }
 
   public static class Thing implements Closeable {
-    private String mValue;
+    @Nullable private String mValue;
 
     public Thing(String value) {
       mValue = value;
@@ -112,9 +107,7 @@ public class SharedReferenceTest {
     }
   }
 
-  /**
-   * A subclass of Thing that throws an exception on close
-   */
+  /** A subclass of Thing that throws an exception on close */
   public static class Thing2 extends Thing {
     private String mValue;
 
@@ -127,15 +120,16 @@ public class SharedReferenceTest {
     }
   }
 
-  public final ResourceReleaser<Thing> THING_RELEASER = new ResourceReleaser<Thing>() {
-    @Override
-    public void release(Thing value) {
-      try {
-        Closeables.close(value, true);
-      } catch (IOException ioe) {
-        // this should not happen
-        Assert.fail();
-      }
-    }
-  };
+  public final ResourceReleaser<Thing> THING_RELEASER =
+      new ResourceReleaser<Thing>() {
+        @Override
+        public void release(Thing value) {
+          try {
+            Closeables.close(value, true);
+          } catch (IOException ioe) {
+            // this should not happen
+            Assert.fail();
+          }
+        }
+      };
 }

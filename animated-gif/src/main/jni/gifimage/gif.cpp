@@ -1,25 +1,33 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #define LOG_TAG "GifImage"
 
+#include <android/bitmap.h>
+#include <android/log.h>
+#include <angliru/Angliru.h>
 #include <jni.h>
+#include <unistd.h>
 #include <algorithm>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <utility>
 #include <vector>
-#include <android/bitmap.h>
-#include <android/log.h>
 
 #include "gif_lib.h"
+#include "locks.h"
+#include "secure_memcpy.h"
+
+#if defined(__has_include) && __has_include(<jni/jni_helpers.h>)
+#include <jni/jni_helpers.h>
+#else
 #include "jni_helpers.h"
+#endif
 
 using namespace facebook;
 
@@ -36,47 +44,146 @@ static void DGifCloseFile2(GifFileType* pGifFile) {
 }
 
 class DataWrapper {
+ public:
+  DataWrapper() {}
 
-public:
-  DataWrapper(std::vector<uint8_t>&& pBuffer) :
-    m_pBuffer(std::move(pBuffer)), m_position(0) {
+  virtual ~DataWrapper() {}
+
+  virtual size_t read(GifByteType* dest, size_t size) = 0;
+
+  virtual size_t getBufferSize() = 0;
+
+  virtual size_t getPosition() = 0;
+
+  virtual bool setPosition(size_t position) = 0;
+};
+
+class BytesDataWrapper : public DataWrapper {
+ public:
+  BytesDataWrapper(std::vector<uint8_t>&& pBuffer)
+      : DataWrapper(), m_pBuffer(std::move(pBuffer)), m_position(0) {
+    m_length = m_pBuffer.size();
   }
 
-  uint8_t* getBuffer() {
-    return m_pBuffer.data();
+  inline static size_t rangeAdd(size_t current, size_t increment, size_t max) {
+    size_t end = current + increment;
+    if (end < current || // integer overflow
+        end > max // buffer overflow
+    ) {
+      end = max;
+    }
+
+    return end;
   }
 
-  size_t getBufferSize() {
-    return m_pBuffer.size();
+  size_t read(GifByteType* dest, size_t size) override {
+    size_t endPosition = rangeAdd(m_position, size, m_length);
+    size_t readSize = endPosition - m_position;
+    if (try_checked_memcpy(
+            dest,
+            m_length - m_position, // total buffer len - current position =
+                                   // # of remaining bytes in dest
+            m_pBuffer.data() + m_position,
+            readSize) != 0) {
+      return 0; // memcpy error
+    } else {
+      m_position = endPosition;
+      return readSize;
+    }
   }
 
-  size_t getPosition() {
+  size_t getBufferSize() override {
+    return m_length;
+  }
+
+  size_t getPosition() override {
     return m_position;
   }
 
-  void setPosition(size_t position) {
-    m_position = position;
+  bool setPosition(size_t position) override {
+    if (position < m_length) {
+      m_position = position;
+      return true;
+    } else {
+      return false;
+    }
   }
 
-private:
+ private:
   std::vector<uint8_t> m_pBuffer;
   size_t m_position;
+  size_t m_length;
+};
+
+class FileDataWrapper : public DataWrapper {
+ public:
+  static FileDataWrapper* create(JNIEnv* pEnv, int fd) {
+    fd = dup(fd);
+    FILE* file = fdopen(fd, "rb");
+    if (file == nullptr) {
+      throwIllegalStateException(
+          pEnv, "Unable to open file: %s", strerror(errno));
+      return nullptr;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+      throwIllegalStateException(
+          pEnv, "Unable to seek to end of file: %s", strerror(errno));
+      return nullptr;
+    }
+    long size = ftell(file);
+    if (size < 0) {
+      throwIllegalStateException(
+          pEnv, "Unable to get file size: %s", strerror(errno));
+      return nullptr;
+    }
+    if (fseek(file, 0, SEEK_SET) != 0) {
+      throwIllegalStateException(
+          pEnv, "Unable to seek to beginning of file: %s", strerror(errno));
+      return nullptr;
+    }
+    return new FileDataWrapper(file, size);
+  }
+
+  FileDataWrapper(FILE* file, size_t length)
+      : DataWrapper(), m_file(file), m_length(length) {}
+
+  ~FileDataWrapper() override {
+    fclose(m_file);
+  }
+
+  size_t read(GifByteType* dest, size_t size) override {
+    return fread(dest, 1, size, m_file);
+  }
+
+  size_t getBufferSize() override {
+    return m_length;
+  }
+
+  size_t getPosition() override {
+    long position = ftell(m_file);
+    return position >= 0 ? position : 0;
+  }
+
+  bool setPosition(size_t position) override {
+    return fseek(m_file, position, SEEK_SET) == 0;
+  }
+
+ private:
+  FILE* m_file;
+  size_t m_length;
 };
 
 class GifWrapper {
-
-public:
+ public:
   GifWrapper(
       std::unique_ptr<GifFileType, decltype(&DGifCloseFile2)>&& pGifFile,
-      std::shared_ptr<DataWrapper>& pData) :
-          m_spGifFile(std::move(pGifFile)),
-          m_spData(pData),
-          m_reservedBufferSize(m_spGifFile->SWidth * m_spGifFile->SHeight) {
-    m_rasterBits.reserve(m_reservedBufferSize);
-  }
+      std::shared_ptr<DataWrapper>& pData)
+      : m_spGifFile(std::move(pGifFile)),
+        m_spData(pData),
+        m_rasterBits(m_spGifFile->SWidth * m_spGifFile->SHeight) {}
 
   virtual ~GifWrapper() {
-    //FBLOGD("Deleting GifWrapper");
+    // FBLOGD("Deleting GifWrapper");
   }
 
   GifFileType* get() {
@@ -107,15 +214,12 @@ public:
     return m_rasterBits.data();
   }
 
-  size_t getRasterBitsSize() {
-    return m_rasterBits.size();
+  size_t getRasterBitsCapacity() {
+    return m_rasterBits.capacity();
   }
 
-  void reserveRasterBuffer(size_t bufferSize) {
-    if (m_reservedBufferSize < bufferSize) {
-      m_rasterBits.reserve(bufferSize);
-      m_reservedBufferSize = bufferSize;
-    }
+  void resizeRasterBuffer(size_t bufferSize) {
+    m_rasterBits.resize(bufferSize);
   }
 
   std::mutex& getRasterMutex() {
@@ -126,21 +230,33 @@ public:
     m_loopCount = pLoopCount;
   }
 
-private:
+  bool isAnimated() {
+    return m_animated;
+  }
+
+  void setAnimated(bool animated) {
+    m_animated = animated;
+  }
+
+  RWLock* getSavedImagesRWLock() {
+    return &m_savedImagesRWLock;
+  }
+
+ private:
   int m_loopCount = LOOP_COUNT_MISSING;
+  bool m_animated = false;
   std::unique_ptr<GifFileType, decltype(&DGifCloseFile2)> m_spGifFile;
   std::shared_ptr<DataWrapper> m_spData;
   std::vector<int> m_vectorFrameByteOffsets;
   std::vector<uint8_t> m_rasterBits;
   std::mutex m_rasterMutex;
-  size_t m_reservedBufferSize;
+  mutable RWLock m_savedImagesRWLock;
 };
 
 /**
  * Native context for GifImage.
  */
 struct GifImageNativeContext {
-
   /** Reference to the GifWrapper */
   std::shared_ptr<GifWrapper> spGifWrapper;
 
@@ -167,17 +283,16 @@ struct GifImageNativeContext {
 
 #if EXTRA_LOGGING
   ~GifImageNativeContext() {
-    __android_log_write(ANDROID_LOG_DEBUG, LOG_TAG, "GifImageNativeContext destructor");
+    __android_log_write(
+        ANDROID_LOG_DEBUG, LOG_TAG, "GifImageNativeContext destructor");
   }
 #endif
-
 };
 
 /**
  * Native context for GifFrame.
  */
 struct GifFrameNativeContext {
-
   /* Reference to the GifWrapper */
   std::shared_ptr<GifWrapper> spGifWrapper;
 
@@ -210,29 +325,24 @@ struct GifFrameNativeContext {
 
 #if EXTRA_LOGGING
   ~GifFrameNativeContext() {
-    __android_log_write(ANDROID_LOG_DEBUG, LOG_TAG, "GifFrameNativeContext destructor");
+    __android_log_write(
+        ANDROID_LOG_DEBUG, LOG_TAG, "GifFrameNativeContext destructor");
   }
 #endif
 };
 
 /**
- * giflib takes a callback function for reading fromt the file.
+ * giflib takes a callback function for reading from the file.
  */
 static int directByteBufferReadFun(
-   GifFileType* gifFileType,
-   GifByteType* bytes,
-   int size) {
-  DataWrapper* pData = (DataWrapper*) gifFileType->UserData;
-  size_t position = pData->getPosition();
-  size_t bufferSize = pData->getBufferSize();
-  if (position + size > bufferSize) {
-    size = bufferSize - position;
-  }
+    GifFileType* gifFileType,
+    GifByteType* bytes,
+    int size) {
+  DataWrapper* pData = (DataWrapper*)gifFileType->UserData;
   if (size > 0) {
-    memcpy(bytes, pData->getBuffer() + position, size);
-    pData->setPosition(position + size);
+    return pData->read(bytes, size);
   }
-  return size;
+  return 0;
 }
 
 /**
@@ -248,7 +358,7 @@ struct PixelType32 {
 /**
  * Transparent pixel constant.
  */
-static const PixelType32 TRANSPARENT {0, 0, 0, 0};
+static const PixelType32 TRANSPARENT{0, 0, 0, 0};
 
 // Class Names.
 static const char* const kGifImageClassPathName =
@@ -274,9 +384,9 @@ static ColorMapObject* genDefColorMap(void) {
   if (pColorMap != NULL) {
     int iColor;
     for (iColor = 0; iColor < 256; iColor++) {
-      pColorMap->Colors[iColor].Red = (GifByteType) iColor;
-      pColorMap->Colors[iColor].Green = (GifByteType) iColor;
-      pColorMap->Colors[iColor].Blue = (GifByteType) iColor;
+      pColorMap->Colors[iColor].Red = (GifByteType)iColor;
+      pColorMap->Colors[iColor].Green = (GifByteType)iColor;
+      pColorMap->Colors[iColor].Blue = (GifByteType)iColor;
     }
   }
   return pColorMap;
@@ -286,72 +396,97 @@ static ColorMapObject* genDefColorMap(void) {
 /// Related to GifImage
 ////////////////////////////////////////////////////////////////
 
-bool getGraphicsControlBlockForImage(SavedImage* pSavedImage, GraphicsControlBlock* pGcp) {
+bool getGraphicsControlBlockForImage(
+    SavedImage* pSavedImage,
+    GraphicsControlBlock* pGcp) {
   int resultCode = GIF_ERROR;
   // If a GIF has multiple graphic control extension blocks, we use the last one
   for (int i = 0; i < pSavedImage->ExtensionBlockCount; i++) {
     ExtensionBlock* pExtensionBlock = &pSavedImage->ExtensionBlocks[i];
     if (pExtensionBlock->Function == GRAPHICS_EXT_FUNC_CODE) {
-      resultCode = DGifExtensionToGCB(pExtensionBlock->ByteCount, pExtensionBlock->Bytes, pGcp);
+      resultCode = DGifExtensionToGCB(
+          pExtensionBlock->ByteCount, pExtensionBlock->Bytes, pGcp);
     }
   }
   return resultCode == GIF_OK;
 }
 
 /**
- * Reads a single frame by reading data using giflib. The method expects the data source
- * referenced by pGifFile to point to the first byte of the encoded frame data. When the method
- * returns, the data source will point to the byte just past the encoded frame data. Unlike standard
- * decoding with giflib, the raster data is written to the passed-in buffer instead of being
- * written to the SavedImage structure. This is the key to how we avoid caching all the decoded
+ * Reads a single frame by reading data using giflib. The method expects the
+ data source
+ * referenced by pGifFile to point to the first byte of the encoded frame data.
+ When the method
+ * returns, the data source will point to the byte just past the encoded frame
+ data. Unlike standard
+ * decoding with giflib, the raster data is written to the passed-in buffer
+ instead of being
+ * written to the SavedImage structure. This is the key to how we avoid caching
+ all the decoded
  * frame pixels in memory.
  *
- * @param pGifWrapper the gif wrapper containing the giflib struct and additional data
- * @param decodeFrame if set to true, next frame will be decoded to pGifWrapper bits buffer,
-       otherwise it will only decode frame data and skip it
+ * @param pGifWrapper the gif wrapper containing the giflib struct and
+ additional data
+ * @param decodeFrame if set to true, next frame will be decoded to pGifWrapper
+ bits buffer, otherwise it will only decode frame data and skip it
  * @param addToSavedImages if set to true, will add an additional SavedImage to
  *     pGifFile->SavedImages
+ * @param maxDimension Maximum allowed dimension of each decoded frame
  * @return a gif error code
  */
 int readSingleFrame(
     GifWrapper* pGifWrapper,
     bool decodeFramePixels,
-    bool addToSavedImages) {
+    bool addToSavedImages,
+    int maxDimension) {
+  GifFileType* pGifFile = pGifWrapper->get();
 
-  GifFileType *pGifFile = pGifWrapper->get();
+  int imageCount = pGifFile->ImageCount;
+  int imageDescResult = GIF_ERROR;
+  {
+    WriterLock wlock_{pGifWrapper->getSavedImagesRWLock()};
+    imageDescResult = DGifGetImageDesc(pGifFile);
+  }
 
-  if (DGifGetImageDesc(pGifFile) == GIF_ERROR) {
+  // DGifGetImageDesc may have changed the count, temporarily restoring until we
+  // know whether the frame was read successfully.
+  pGifFile->ImageCount = imageCount;
+
+  if (imageDescResult == GIF_ERROR) {
     return GIF_ERROR;
   }
-  SavedImage* pSavedImage = &pGifFile->SavedImages[pGifFile->ImageCount - 1];
+
+  ReaderLock rlock_{pGifWrapper->getSavedImagesRWLock()};
+  SavedImage* pSavedImage = &pGifFile->SavedImages[imageCount];
 
   // Check size of image. Note: Frames with 0 width or height should be allowed.
-  if (pSavedImage->ImageDesc.Width < 0 || pSavedImage->ImageDesc.Height < 0) {
+  if (pSavedImage->ImageDesc.Width < 0 || pSavedImage->ImageDesc.Height < 0 ||
+      pSavedImage->ImageDesc.Width > maxDimension ||
+      pSavedImage->ImageDesc.Height > maxDimension) {
     return GIF_ERROR;
   }
 
   // Check for image size overflow.
-  if (pSavedImage->ImageDesc.Width > 0 &&
-      pSavedImage->ImageDesc.Height > 0 &&
-      pSavedImage->ImageDesc.Width > (INT_MAX / pSavedImage->ImageDesc.Height)) {
+  if (pSavedImage->ImageDesc.Height != 0 &&
+      pSavedImage->ImageDesc.Width >
+          (INT_MAX / pSavedImage->ImageDesc.Height)) {
     return GIF_ERROR;
   }
 
   if (decodeFramePixels) {
     // Reserve larger raster bits buffer if needed
-    size_t imageSize = pSavedImage->ImageDesc.Width * pSavedImage->ImageDesc.Height;
-    pGifWrapper->reserveRasterBuffer(imageSize);
+    size_t imageSize =
+        pSavedImage->ImageDesc.Width * pSavedImage->ImageDesc.Height;
+    pGifWrapper->resizeRasterBuffer(imageSize);
 
     // Decode frame image and save it to temporary raster bits buffer
     uint8_t* pRasterBits = pGifWrapper->getRasterBits();
     if (pSavedImage->ImageDesc.Interlace) {
       // The way an interlaced image should be read - offsets and jumps...
-      int interlacedOffset[] = { 0, 4, 2, 1 };
-      int interlacedJumps[] = { 8, 8, 4, 2 };
+      int interlacedOffset[] = {0, 4, 2, 1};
+      int interlacedJumps[] = {8, 8, 4, 2};
       // Need to perform 4 passes on the image.
       for (int i = 0; i < 4; i++) {
-        for (int j = interlacedOffset[i];
-             j < pSavedImage->ImageDesc.Height;
+        for (int j = interlacedOffset[i]; j < pSavedImage->ImageDesc.Height;
              j += interlacedJumps[i]) {
           GifPixelType* pLine = pRasterBits + j * pSavedImage->ImageDesc.Width;
           int lineLength = pSavedImage->ImageDesc.Width;
@@ -387,12 +522,13 @@ int readSingleFrame(
     pGifFile->ExtensionBlockCount = 0;
   }
 
-  if (!addToSavedImages) {
-    // giflib wasn't designed to work with decoding arbitrary frames on the fly. By default, it will
-    // keep adding more images to the SavedImages array. To avoid that, we just decrement the image
-    // count. It basically means the array remains larger by one GifFileType. We decrement it so
-    // it doesn't grow by one every time we decode.
-    pGifFile->ImageCount--;
+  if (addToSavedImages) {
+    // giflib wasn't designed to work with decoding arbitrary frames on the fly.
+    // By default, it keeps adding more images to the SavedImages array, and we
+    // reset the value after calling DGifGetImageDesc. Now, as the result of
+    // decoding is known to be successful, we can increment the value to
+    // represent correct number of images.
+    pGifFile->ImageCount = imageCount + 1;
   }
 
   return GIF_OK;
@@ -430,11 +566,11 @@ int decodeExtension(GifFileType* pGifFile) {
     // Continue the extension block.
     if (pExtData != NULL) {
       if (GifAddExtensionBlock(
-          &pGifFile->ExtensionBlockCount,
-          &pGifFile->ExtensionBlocks,
-          CONTINUE_EXT_FUNC_CODE,
-          pExtData[0],
-          &pExtData[1]) == GIF_ERROR) {
+              &pGifFile->ExtensionBlockCount,
+              &pGifFile->ExtensionBlocks,
+              CONTINUE_EXT_FUNC_CODE,
+              pExtData[0],
+              &pExtData[1]) == GIF_ERROR) {
         return GIF_ERROR;
       }
     }
@@ -443,14 +579,18 @@ int decodeExtension(GifFileType* pGifFile) {
 }
 
 /**
- * Tries to parse known application extensions of a given SavedImage and adds the information
- * to the GifWrapper accordingly. Currently, this method only parses the Netscape 2.0 looping
- * extension which can indicate how often a GIF animation shall be played.
+ * Tries to parse known application extensions of a given SavedImage and adds
+ * the information to the GifWrapper accordingly. Currently, this method only
+ * parses the Netscape 2.0 looping extension which can indicate how often a GIF
+ * animation shall be played.
  *
  * @param pSavedImage saved image that might contain several ExtensionBlocks
- * @param pGifWrapper gif wrapper containing the giflib struct and additional data
+ * @param pGifWrapper gif wrapper containing the giflib struct and additional
+ * data
  */
-void parseApplicationExtensions(SavedImage* pSavedImage, GifWrapper* pGifWrapper) {
+void parseApplicationExtensions(
+    SavedImage* pSavedImage,
+    GifWrapper* pGifWrapper) {
   const int extensionCount = pSavedImage->ExtensionBlockCount;
   for (int j = 0; j < extensionCount; j++) {
     const ExtensionBlock* extensionBlock = &pSavedImage->ExtensionBlocks[j];
@@ -462,18 +602,16 @@ void parseApplicationExtensions(SavedImage* pSavedImage, GifWrapper* pGifWrapper
     // Check for Netscape 2.0 looping block
     if (extensionBlock->ByteCount == APPLICATION_EXT_NETSCAPE_LEN &&
         strncmp(
-          APPLICATION_EXT_NETSCAPE,
-          (const char*) extensionBlock->Bytes,
-          APPLICATION_EXT_NETSCAPE_LEN) == 0) {
-
+            APPLICATION_EXT_NETSCAPE,
+            (const char*)extensionBlock->Bytes,
+            APPLICATION_EXT_NETSCAPE_LEN) == 0) {
       // The data sub-block has been added as the following extension block
       ExtensionBlock* subBlock = NULL;
       if (j + 1 < extensionCount) {
         subBlock = &pSavedImage->ExtensionBlocks[j + 1];
       }
 
-      if (subBlock != NULL &&
-          subBlock->Function == CONTINUE_EXT_FUNC_CODE &&
+      if (subBlock != NULL && subBlock->Function == CONTINUE_EXT_FUNC_CODE &&
           subBlock->ByteCount == 3) {
         // The loop count is stored little endian
         const int loopCount = subBlock->Bytes[1] | subBlock->Bytes[2] << 8;
@@ -487,15 +625,21 @@ void parseApplicationExtensions(SavedImage* pSavedImage, GifWrapper* pGifWrapper
 }
 
 /**
- * A heavily modified version of giflib's DGifSlurp. This uses some hacks to avoid caching the
- * decoded pixel data for each frame in memory. Like DGifSlurp, GifFileType will contain the
- * results of slurping the GIF but there will be no frame pixel data cached in
- * SavedImage.RasterBits.
+ * A heavily modified version of giflib's DGifSlurp. This uses some hacks to
+ * avoid caching the decoded pixel data for each frame in memory. Like
+ * DGifSlurp, GifFileType will contain the results of slurping the GIF but there
+ * will be no frame pixel data cached in SavedImage.RasterBits.
  *
- * @param pGifWrapper the gif wrapper containing the giflib struct and additional data
+ * @param pGifWrapper the gif wrapper containing the giflib struct and
+ * additional data
+ * @param maxDimension Maximum allowed dimension of each frame
+ * @param forceStatic whether GIF will be loaded as static image
  * @return a gif error code
  */
-int modifiedDGifSlurp(GifWrapper* pGifWrapper) {
+int modifiedDGifSlurp(
+    GifWrapper* pGifWrapper,
+    int maxDimension,
+    bool forceStatic) {
   GifFileType* pGifFile = pGifWrapper->get();
   GifRecordType recordType;
 
@@ -509,15 +653,27 @@ int modifiedDGifSlurp(GifWrapper* pGifWrapper) {
 
     switch (recordType) {
       case IMAGE_DESC_RECORD_TYPE:
-        // We save the byte offset where each frame begins. This allows us to avoid storing
-        // the pixel data for each frame and instead decode it on the fly.
+        // Set the flag whether gif is animated, but give up slurping after the
+        // first frame, when static image is requested.
+        if (pGifFile->ImageCount >= 1) {
+          pGifWrapper->setAnimated(true);
+          if (forceStatic) {
+            isStop = true;
+            break;
+          }
+        }
+
+        // We save the byte offset where each frame begins. This allows us to
+        // avoid storing the pixel data for each frame and instead decode it on
+        // the fly.
         pGifWrapper->addFrameByteOffset(pGifWrapper->getData()->getPosition());
 
         if (readSingleFrame(
-              pGifWrapper,
-              false, // Don't decode frame pixels
-              true  // Add to saved images
-              ) == GIF_ERROR) {
+                pGifWrapper,
+                false, // Don't decode frame pixels
+                true, // Add to saved images
+                maxDimension // Max dimension
+                ) == GIF_ERROR) {
           isStop = true;
         }
         break;
@@ -532,14 +688,15 @@ int modifiedDGifSlurp(GifWrapper* pGifWrapper) {
         isStop = true;
         break;
 
-       default:    // Should be trapped by DGifGetRecordType.
+      default: // Should be trapped by DGifGetRecordType.
         break;
-      }
+    }
   } while (!isStop);
   isStop = false;
 
   // parse application extensions
   const int imageCount = pGifFile->ImageCount;
+  ReaderLock rlock_{pGifWrapper->getSavedImagesRWLock()};
   for (int i = 0; i < imageCount; i++) {
     parseApplicationExtensions(&pGifFile->SavedImages[i], pGifWrapper);
   }
@@ -548,30 +705,30 @@ int modifiedDGifSlurp(GifWrapper* pGifWrapper) {
 }
 
 /**
- * Creates a new GifImage from the specified buffer.
+ * Creates a new GifImage from the specified data.
  *
- * @param vBuffer the vector containing the bytes
+ * @param spDataWrapper the wrapper providing bytes
+ * @param maxDimension Maximum allowed dimension of canvas and each decoded
+ * frame
+ * @param forceStatic Whether GIF should be decoded as static image
  * @return a newly allocated GifImage
  */
-jobject GifImage_nativeCreateFromByteVector(JNIEnv* pEnv, std::vector<uint8_t>& vBuffer) {
-  std::unique_ptr<GifImageNativeContext> spNativeContext(new GifImageNativeContext());
+jobject createFromDataWrapper(
+    JNIEnv* pEnv,
+    std::shared_ptr<DataWrapper> spDataWrapper,
+    int maxDimension,
+    bool forceStatic) {
+  std::unique_ptr<GifImageNativeContext> spNativeContext(
+      new GifImageNativeContext());
   if (!spNativeContext) {
     throwOutOfMemoryError(pEnv, "Unable to allocate native context");
     return 0;
   }
 
-  // Create the DataWrapper
-  std::shared_ptr<DataWrapper> spDataWrapper =
-      std::shared_ptr<DataWrapper>(new DataWrapper(std::move(vBuffer)));
-
   int gifError = 0;
-  auto spGifFileIn = std::unique_ptr<GifFileType, decltype(&DGifCloseFile2)> {
-      DGifOpen(
-          (void*) spDataWrapper.get(),
-          &directByteBufferReadFun,
-          &gifError),
-      DGifCloseFile2
-  };
+  auto spGifFileIn = std::unique_ptr<GifFileType, decltype(&DGifCloseFile2)>{
+      DGifOpen((void*)spDataWrapper.get(), &directByteBufferReadFun, &gifError),
+      DGifCloseFile2};
 
   if (spGifFileIn == nullptr) {
     throwIllegalStateException(pEnv, "Error %d", gifError);
@@ -581,21 +738,23 @@ jobject GifImage_nativeCreateFromByteVector(JNIEnv* pEnv, std::vector<uint8_t>& 
   int width = spGifFileIn->SWidth;
   int height = spGifFileIn->SHeight;
   size_t wxh = width * height;
-  if (wxh < 1 || wxh > SIZE_MAX) {
+  if (wxh < 1 || wxh > SIZE_MAX || width > maxDimension ||
+      height > maxDimension) {
     throwIllegalStateException(pEnv, "Invalid dimensions");
     return nullptr;
   }
 
   // Create the GifWrapper
   spNativeContext->spGifWrapper = std::shared_ptr<GifWrapper>(
-    new GifWrapper(std::move(spGifFileIn), spDataWrapper));
+      new GifWrapper(std::move(spGifFileIn), spDataWrapper));
 
   GifFileType* pGifFile = spNativeContext->spGifWrapper->get();
 
   spNativeContext->pixelWidth = width;
   spNativeContext->pixelHeight = height;
 
-  int error = modifiedDGifSlurp(spNativeContext->spGifWrapper.get());
+  int error = modifiedDGifSlurp(
+      spNativeContext->spGifWrapper.get(), maxDimension, forceStatic);
   if (error != GIF_OK) {
     throwIllegalStateException(pEnv, "Failed to slurp image %d", error);
     return nullptr;
@@ -610,6 +769,7 @@ jobject GifImage_nativeCreateFromByteVector(JNIEnv* pEnv, std::vector<uint8_t>& 
   // Compute cached fields that require iterating the frames.
   int durationMs = 0;
   std::vector<jint> frameDurationsMs;
+  ReaderLock rlock_{spNativeContext->spGifWrapper->getSavedImagesRWLock()};
   for (int i = 0; i < pGifFile->ImageCount; i++) {
     SavedImage* pSavedImage = &pGifFile->SavedImages[i];
     GraphicsControlBlock gcp;
@@ -629,9 +789,7 @@ jobject GifImage_nativeCreateFromByteVector(JNIEnv* pEnv, std::vector<uint8_t>& 
 
   // Create the GifImage with the native context.
   jobject ret = pEnv->NewObject(
-      sClazzGifImage,
-      sGifImageConstructor,
-      (jlong) spNativeContext.get());
+      sClazzGifImage, sGifImageConstructor, (jlong)spNativeContext.get());
   if (ret != nullptr) {
     // Ownership was transferred.
     spNativeContext->refCount = 1;
@@ -641,10 +799,30 @@ jobject GifImage_nativeCreateFromByteVector(JNIEnv* pEnv, std::vector<uint8_t>& 
 }
 
 /**
- * Releases a reference to the GifPImageNativeContext and deletes it when the reference count
- * reaches 0
+ * Creates a new GifImage from the specified buffer.
+ *
+ * @param vBuffer the vector containing the bytes
+ * @return a newly allocated GifImage
  */
-void GifImageNativeContext_releaseRef(JNIEnv* pEnv, jobject thiz, GifImageNativeContext* p) {
+jobject GifImage_nativeCreateFromByteVector(
+    JNIEnv* pEnv,
+    __ANGLIRU_SOURCE__ std::vector<uint8_t>& vBuffer,
+    int maxDimension,
+    bool forceStatic) {
+  // Create the DataWrapper
+  std::shared_ptr<DataWrapper> spDataWrapper =
+      std::shared_ptr<DataWrapper>(new BytesDataWrapper(std::move(vBuffer)));
+  return createFromDataWrapper(pEnv, spDataWrapper, maxDimension, forceStatic);
+}
+
+/**
+ * Releases a reference to the GifPImageNativeContext and deletes it when the
+ * reference count reaches 0
+ */
+void GifImageNativeContext_releaseRef(
+    JNIEnv* pEnv,
+    jobject thiz,
+    GifImageNativeContext* p) {
   pEnv->MonitorEnter(thiz);
   p->refCount--;
   if (p->refCount == 0) {
@@ -660,27 +838,29 @@ struct GifImageNativeContextReleaser {
   JNIEnv* pEnv;
   jobject gifImage;
 
-  GifImageNativeContextReleaser(JNIEnv* pEnv, jobject gifImage) : pEnv(pEnv), gifImage(gifImage) {}
+  GifImageNativeContextReleaser(JNIEnv* pEnv, jobject gifImage)
+      : pEnv(pEnv), gifImage(gifImage) {}
   void operator()(GifImageNativeContext* pNativeContext) {
     GifImageNativeContext_releaseRef(pEnv, gifImage, pNativeContext);
   }
 };
 
 /**
- * Gets the GifImageNativeContext from the mNativeContext of the GifImage object. This returns
- * a reference counted pointer.
+ * Gets the GifImageNativeContext from the mNativeContext of the GifImage
+ * object. This returns a reference counted pointer.
  *
- * @return the referenced counted pointer which will be a nullptr in the case where the object has
- *    already been disposed
+ * @return the referenced counted pointer which will be a nullptr in the case
+ * where the object has already been disposed
  */
 std::unique_ptr<GifImageNativeContext, GifImageNativeContextReleaser>
-    getGifImageNativeContext(JNIEnv* pEnv, jobject thiz) {
-
+getGifImageNativeContext(JNIEnv* pEnv, jobject thiz) {
   GifImageNativeContextReleaser releaser(pEnv, thiz);
-  std::unique_ptr<GifImageNativeContext, GifImageNativeContextReleaser> ret(nullptr, releaser);
+  std::unique_ptr<GifImageNativeContext, GifImageNativeContextReleaser> ret(
+      nullptr, releaser);
   pEnv->MonitorEnter(thiz);
   GifImageNativeContext* pNativeContext =
-      (GifImageNativeContext*) pEnv->GetLongField(thiz, sGifImageFieldNativeContext);
+      (GifImageNativeContext*)pEnv->GetLongField(
+          thiz, sGifImageFieldNativeContext);
   if (pNativeContext != nullptr) {
     pNativeContext->refCount++;
     ret.reset(pNativeContext);
@@ -690,15 +870,23 @@ std::unique_ptr<GifImageNativeContext, GifImageNativeContextReleaser>
 }
 
 /**
- * Creates a new GifImage from the specified byte buffer. The data from the byte buffer is copied
- * into native memory managed by GifImage.
+ * Creates a new GifImage from the specified byte buffer. The data from the byte
+ * buffer is copied into native memory managed by GifImage.
  *
- * @param byteBuffer A java.nio.ByteBuffer. Must be direct. Assumes data is the entire capacity
- *      of the buffer
+ * @param byteBuffer A java.nio.ByteBuffer. Must be direct. Assumes data is the
+ * entire capacity of the buffer
+ * @param maxDimension Maximum allowed dimension of canvas and each decoded
+ * frame
+ * @param forceStatic Whether GIF should be decoded as static image
  * @return a newly allocated GifImage
  */
-jobject GifImage_nativeCreateFromDirectByteBuffer(JNIEnv* pEnv, jclass clazz, jobject byteBuffer) {
-  jbyte* bbufInput = (jbyte*) pEnv->GetDirectBufferAddress(byteBuffer);
+jobject GifImage_nativeCreateFromDirectByteBuffer(
+    JNIEnv* pEnv,
+    jclass clazz,
+    jobject byteBuffer,
+    jint maxDimension,
+    jboolean forceStatic) {
+  jbyte* bbufInput = (jbyte*)pEnv->GetDirectBufferAddress(byteBuffer);
   if (!bbufInput) {
     throwIllegalArgumentException(pEnv, "ByteBuffer must be direct");
     return 0;
@@ -710,26 +898,57 @@ jobject GifImage_nativeCreateFromDirectByteBuffer(JNIEnv* pEnv, jclass clazz, jo
   }
 
   std::vector<uint8_t> vBuffer(bbufInput, bbufInput + capacity);
-  return GifImage_nativeCreateFromByteVector(pEnv, vBuffer);
+  return GifImage_nativeCreateFromByteVector(
+      pEnv, vBuffer, maxDimension, forceStatic);
 }
 
 /**
- * Creates a new GifImage from the specified native pointer. The data is copied into memory
- managed by GifImage.
+ * Creates a new GifImage from the specified native pointer. The data is copied
+into memory managed by GifImage.
  *
  * @param nativePtr the native memory pointer
  * @param sizeInBytes size in bytes of the buffer
+* @param maxDimension Maximum allowed dimension of canvas and each decoded frame
+ * @param forceStatic whether GIF will be loaded as static image
  * @return a newly allocated GifImage
  */
 jobject GifImage_nativeCreateFromNativeMemory(
     JNIEnv* pEnv,
     jclass clazz,
     jlong nativePtr,
-    jint sizeInBytes) {
-
-  jbyte* const pointer = (jbyte*) nativePtr;
+    jint sizeInBytes,
+    jint maxDimension,
+    jboolean forceStatic) {
+  jbyte* const pointer = (jbyte*)nativePtr;
   std::vector<uint8_t> vBuffer(pointer, pointer + sizeInBytes);
-  return GifImage_nativeCreateFromByteVector(pEnv, vBuffer);
+  return GifImage_nativeCreateFromByteVector(
+      pEnv, vBuffer, maxDimension, forceStatic);
+}
+
+/**
+ * Creates a new GifImage from the specified byte buffer. The data from the byte
+ * buffer is copied into native memory managed by GifImage.
+ *
+ * @param fileDescriptor File descriptor to open
+ * @param maxDimension Maximum allowed dimension of canvas and each decoded
+ * frame
+ * @param forceStatic Whether GIF should be decoded as static image
+ * @return a newly allocated GifImage
+ */
+jobject GifImage_nativeCreateFromFileDescriptor(
+    JNIEnv* pEnv,
+    jclass clazz,
+    jint fileDescriptor,
+    jint maxDimension,
+    jboolean forceStatic) {
+  // Create the DataWrapper
+  std::shared_ptr<FileDataWrapper> spDataWrapper =
+      std::shared_ptr<FileDataWrapper>(
+          FileDataWrapper::create(pEnv, fileDescriptor));
+  if (pEnv->ExceptionCheck() || !spDataWrapper) {
+    return 0;
+  }
+  return createFromDataWrapper(pEnv, spDataWrapper, maxDimension, forceStatic);
 }
 
 /**
@@ -805,8 +1024,8 @@ jint GifImage_nativeGetLoopCount(JNIEnv* pEnv, jobject thiz) {
 /**
  * Gets the duration of each frame of the animated image.
  *
- * @return an array that is the size of the number of frames containing the duration of each frame
- *     in milliseconds
+ * @return an array that is the size of the number of frames containing the
+ * duration of each frame in milliseconds
  */
 jintArray GifImage_nativeGetFrameDurations(JNIEnv* pEnv, jobject thiz) {
   auto spNativeContext = getGifImageNativeContext(pEnv, thiz);
@@ -816,7 +1035,8 @@ jintArray GifImage_nativeGetFrameDurations(JNIEnv* pEnv, jobject thiz) {
   }
   jintArray result = pEnv->NewIntArray(spNativeContext->numFrames);
   if (result == nullptr) {
-    // pEnv->NewIntArray will have already instructed the environment to throw an exception.
+    // pEnv->NewIntArray will have already instructed the environment to throw
+    // an exception.
     return nullptr;
   }
 
@@ -835,16 +1055,25 @@ jintArray GifImage_nativeGetFrameDurations(JNIEnv* pEnv, jobject thiz) {
  * @return a newly created GifFrame for the specified frame
  */
 jobject GifImage_nativeGetFrame(JNIEnv* pEnv, jobject thiz, jint index) {
- auto spNativeContext = getGifImageNativeContext(pEnv, thiz);
+  auto spNativeContext = getGifImageNativeContext(pEnv, thiz);
   if (!spNativeContext) {
     throwIllegalStateException(pEnv, "Already disposed");
     return nullptr;
   }
 
   GifFileType* pGifFile = spNativeContext->spGifWrapper->get();
+
+  ReaderLock rlock_{spNativeContext->spGifWrapper->getSavedImagesRWLock()};
+
+  if (index < 0 || index >= pGifFile->ImageCount) {
+    throwIllegalStateException(pEnv, "Index exceeds GIF file image count");
+    return nullptr;
+  }
+
   SavedImage* pSavedImage = &pGifFile->SavedImages[index];
 
-  std::unique_ptr<GifFrameNativeContext> spFrameNativeContext(new GifFrameNativeContext());
+  std::unique_ptr<GifFrameNativeContext> spFrameNativeContext(
+      new GifFrameNativeContext());
   if (!spFrameNativeContext) {
     throwOutOfMemoryError(pEnv, "Unable to allocate GifFrameNativeContext");
     return nullptr;
@@ -868,11 +1097,10 @@ jobject GifImage_nativeGetFrame(JNIEnv* pEnv, jobject thiz, jint index) {
   }
 
   jobject ret = pEnv->NewObject(
-      sClazzGifFrame,
-      sGifFrameConstructor,
-      (jlong) spFrameNativeContext.get());
+      sClazzGifFrame, sGifFrameConstructor, (jlong)spFrameNativeContext.get());
   if (ret != nullptr) {
-    // pEnv->NewObject will have already instructed the environment to throw an exception.
+    // pEnv->NewObject will have already instructed the environment to throw an
+    // exception.
     spFrameNativeContext->refCount = 1;
     spFrameNativeContext.release();
   }
@@ -880,10 +1108,13 @@ jobject GifImage_nativeGetFrame(JNIEnv* pEnv, jobject thiz, jint index) {
 }
 
 /**
- * Releases a reference to the WebPFrameNativeContext and deletes it when the reference count
- * reaches 0
+ * Releases a reference to the WebPFrameNativeContext and deletes it when the
+ * reference count reaches 0
  */
-void GifFrameNativeContext_releaseRef(JNIEnv* pEnv, jobject thiz, GifFrameNativeContext* p) {
+void GifFrameNativeContext_releaseRef(
+    JNIEnv* pEnv,
+    jobject thiz,
+    GifFrameNativeContext* p) {
   pEnv->MonitorEnter(thiz);
   p->refCount--;
   if (p->refCount == 0) {
@@ -899,27 +1130,29 @@ struct GifFrameNativeContextReleaser {
   JNIEnv* pEnv;
   jobject gifFrame;
 
-  GifFrameNativeContextReleaser(JNIEnv* pEnv, jobject gifFrame) : pEnv(pEnv), gifFrame(gifFrame) {}
+  GifFrameNativeContextReleaser(JNIEnv* pEnv, jobject gifFrame)
+      : pEnv(pEnv), gifFrame(gifFrame) {}
   void operator()(GifFrameNativeContext* pNativeContext) {
     GifFrameNativeContext_releaseRef(pEnv, gifFrame, pNativeContext);
   }
 };
 
 /**
- * Gets the GifFrameNativeContext from the mNativeContext of the GifFrame object. This returns
- * a reference counted pointer.
+ * Gets the GifFrameNativeContext from the mNativeContext of the GifFrame
+ * object. This returns a reference counted pointer.
  *
- * @return the reference counted pointer which will be a nullptr in the case where the object has
- *    already been disposed
+ * @return the reference counted pointer which will be a nullptr in the case
+ * where the object has already been disposed
  */
 std::unique_ptr<GifFrameNativeContext, GifFrameNativeContextReleaser>
-    getGifFrameNativeContext(JNIEnv* pEnv, jobject thiz) {
-
+getGifFrameNativeContext(JNIEnv* pEnv, jobject thiz) {
   GifFrameNativeContextReleaser releaser(pEnv, thiz);
-  std::unique_ptr<GifFrameNativeContext, GifFrameNativeContextReleaser> ret(nullptr, releaser);
+  std::unique_ptr<GifFrameNativeContext, GifFrameNativeContextReleaser> ret(
+      nullptr, releaser);
   pEnv->MonitorEnter(thiz);
   GifFrameNativeContext* pNativeContext =
-      (GifFrameNativeContext*) pEnv->GetLongField(thiz, sGifFrameFieldNativeContext);
+      (GifFrameNativeContext*)pEnv->GetLongField(
+          thiz, sGifFrameFieldNativeContext);
   if (pNativeContext != nullptr) {
     pNativeContext->refCount++;
     ret.reset(pNativeContext);
@@ -929,8 +1162,9 @@ std::unique_ptr<GifFrameNativeContext, GifFrameNativeContextReleaser>
 }
 
 /**
- * Gets the size in bytes used by the {@link GifImage}. The implementation only takes into
- * account the encoded data buffer as the other data structures are relatively tiny.
+ * Gets the size in bytes used by the {@link GifImage}. The implementation only
+ * takes into account the encoded data buffer as the other data structures are
+ * relatively tiny.
  *
  * @return approximate size in bytes used by the {@link GifImage}
  */
@@ -944,8 +1178,25 @@ jint GifImage_nativeGetSizeInBytes(JNIEnv* pEnv, jobject thiz) {
   // This is an approximate amount based on the data buffer and the saved images
   int size = 0;
   size += spNativeContext->spGifWrapper->getData()->getBufferSize();
-  size += spNativeContext->spGifWrapper->getRasterBitsSize();
+  size += spNativeContext->spGifWrapper->getRasterBitsCapacity();
   return size;
+}
+
+/**
+ * Gets information whether {@link GifImage} is animated (has more than 1
+ * frame). It will return `true`, even if animated file was opened as static
+ * image.
+ *
+ * @return whether {@link GifImage} is animated image
+ */
+jint GifImage_nativeIsAnimated(JNIEnv* pEnv, jobject thiz) {
+  auto spNativeContext = getGifImageNativeContext(pEnv, thiz);
+  if (!spNativeContext) {
+    throwIllegalStateException(pEnv, "Already disposed");
+    return 0;
+  }
+
+  return spNativeContext->spGifWrapper->isAnimated();
 }
 
 /**
@@ -954,7 +1205,8 @@ jint GifImage_nativeGetSizeInBytes(JNIEnv* pEnv, jobject thiz) {
 void GifImage_nativeDispose(JNIEnv* pEnv, jobject thiz) {
   pEnv->MonitorEnter(thiz);
   GifImageNativeContext* pNativeContext =
-      (GifImageNativeContext*) pEnv->GetLongField(thiz, sGifImageFieldNativeContext);
+      (GifImageNativeContext*)pEnv->GetLongField(
+          thiz, sGifImageFieldNativeContext);
   if (pNativeContext != nullptr) {
     pEnv->SetLongField(thiz, sGifImageFieldNativeContext, 0);
     GifImageNativeContext_releaseRef(pEnv, thiz, pNativeContext);
@@ -968,7 +1220,6 @@ void GifImage_nativeDispose(JNIEnv* pEnv, jobject thiz) {
 void GifImage_nativeFinalize(JNIEnv* pEnv, jobject thiz) {
   GifImage_nativeDispose(pEnv, thiz);
 }
-
 
 ////////////////////////////////////////////////////////////////
 /// Related to GifFrame
@@ -997,18 +1248,24 @@ static PixelType32 packARGB32(
  * @param pColorMap the color map
  * @return a 32-bit pixel
  */
-static PixelType32 getColorFromTable(int idx, const ColorMapObject* pColorMap) {
+static PixelType32 getColorFromTable(
+    unsigned int idx,
+    const ColorMapObject* pColorMap) {
+  if (pColorMap == NULL) {
+    return TRANSPARENT;
+  }
   int colIdx = (idx >= pColorMap->ColorCount) ? 0 : idx;
   GifColorType* pColor = &pColorMap->Colors[colIdx];
   return packARGB32(0xFF, pColor->Red, pColor->Green, pColor->Blue);
 }
 
 /**
- * Blits a line of an 8-bit GIF frame to a 32-bit destination performing the color conversion
- * along the way.
+ * Blits a line of an 8-bit GIF frame to a 32-bit destination performing the
+ * color conversion along the way.
  *
  * @param pDest the 32-bit pixel destination to write into
- * @param pSource the 8-bit frame source where values are indices into the color table
+ * @param pSource the 8-bit frame source where values are indices into the color
+ * table
  * @param pColorMap the color map
  * @param transparentIndex index to use for the transparent pixel
  * @param width number of pixels to copy
@@ -1019,7 +1276,7 @@ static void blitLine(
     const ColorMapObject* pColorMap,
     int transparentIndex,
     int width) {
-  std::transform(pSource, pSource + width, pDest, [=] (uint8_t color) {
+  std::transform(pSource, pSource + width, pDest, [=](uint8_t color) {
     if (color == transparentIndex) {
       return TRANSPARENT;
     }
@@ -1028,7 +1285,8 @@ static void blitLine(
 }
 
 /**
- * Blits an 8-bit GIF frame into a 32-bit destination performing the color conversion along the way.
+ * Blits an 8-bit GIF frame into a 32-bit destination performing the color
+ * conversion along the way.
  *
  * @param pDest the byte buffer to write into
  * @param destWidth the width of the destination
@@ -1057,18 +1315,20 @@ static void blitNormal(
   }
 
   for (; copyHeight > 0; copyHeight--) {
-    blitLine((PixelType32*) pDest, pSrcRasterBits, cmap, transparentIndex, copyWidth);
+    blitLine(
+        (PixelType32*)pDest, pSrcRasterBits, cmap, transparentIndex, copyWidth);
     pSrcRasterBits += pFrame->ImageDesc.Width;
     pDest += destStride;
   }
 }
 
 /**
- * Renders the frame to the specified pixel array. The array is expected to have a size that
- * is at least the the width and height of the frame. The frame is rendered where each pixel is
- * represented as a 32-bit BGRA pixel. The rendered stride is the same as the frame width. Note,
- * the number of pixels written to the array may be smaller than the canvas if the frame's
- * width/height is smaller than the canvas.
+ * Renders the frame to the specified pixel array. The array is expected to have
+ * a size that is at least the the width and height of the frame. The frame is
+ * rendered where each pixel is represented as a 32-bit BGRA pixel. The rendered
+ * stride is the same as the frame width. Note, the number of pixels written to
+ * the array may be smaller than the canvas if the frame's width/height is
+ * smaller than the canvas.
  *
  * @param jPixels the array to render into
  */
@@ -1085,7 +1345,8 @@ void GifFrame_nativeRenderFrame(
   }
 
   AndroidBitmapInfo bitmapInfo;
-  if (AndroidBitmap_getInfo(pEnv, bitmap, &bitmapInfo) != ANDROID_BITMAP_RESULT_SUCCESS) {
+  if (AndroidBitmap_getInfo(pEnv, bitmap, &bitmapInfo) !=
+      ANDROID_BITMAP_RESULT_SUCCESS) {
     throwIllegalStateException(pEnv, "Bad bitmap");
     return;
   }
@@ -1095,7 +1356,8 @@ void GifFrame_nativeRenderFrame(
     return;
   }
 
-  if (bitmapInfo.width < (unsigned) width || bitmapInfo.height < (unsigned) height) {
+  if (bitmapInfo.width < (unsigned)width ||
+      bitmapInfo.height < (unsigned)height) {
     throwIllegalStateException(pEnv, "Width or height is too small");
     return;
   }
@@ -1105,27 +1367,32 @@ void GifFrame_nativeRenderFrame(
     return;
   }
 
-  GifWrapper *pGifWrapper = spNativeContext->spGifWrapper.get();
+  GifWrapper* pGifWrapper = spNativeContext->spGifWrapper.get();
 
-  // Note, there is some major hackery below since giflib is not intended to incrementally decode
-  // arbitrary frames on demand.
+  // Note, there is some major hackery below since giflib is not intended to
+  // incrementally decode arbitrary frames on demand.
 
-  // We need to lock because the raster data and the data offset are shared resources and only
-  // one thread can use them at a time.
+  // We need to lock because the raster data and the data offset are shared
+  // resources and only one thread can use them at a time.
   std::unique_lock<std::mutex> lock(pGifWrapper->getRasterMutex());
 
-  // We set the data buffer that giflib will read from to be at the beginning of where the encoded
-  // data for the frame starts. We know this offset because we stored it when we originally decoded
-  // the GIF.
+  // We set the data buffer that giflib will read from to be at the beginning of
+  // where the encoded data for the frame starts. We know this offset because we
+  // stored it when we originally decoded the GIF.
   int frameNum = spNativeContext->frameNum;
   int byteOffset = pGifWrapper->getFrameByteOffset(frameNum);
-  pGifWrapper->getData()->setPosition(byteOffset);
+  if (!pGifWrapper->getData()->setPosition(byteOffset)) {
+    // Unable to position to frame, ignore it
+    return;
+  }
 
   // Now we kick off the decoding process.
-  int readRes = readSingleFrame(pGifWrapper,
-                                true, // Decode frame pixels
-                                false // Don't add frame to saved images
-                                );
+  int readRes = readSingleFrame(
+      pGifWrapper,
+      true, // Decode frame pixels
+      false, // Don't add frame to saved images
+      INT_MAX // Don't limit the size, it was checked in modifiedDGifSlurp
+  );
   if (readRes != GIF_OK) {
     // Probably, broken canvas, and we can ignore it
     return;
@@ -1133,6 +1400,7 @@ void GifFrame_nativeRenderFrame(
 
   // Get the right color table to use.
   ColorMapObject* pColorMap = spNativeContext->spGifWrapper->get()->SColorMap;
+  ReaderLock rlock_{pGifWrapper->getSavedImagesRWLock()};
   SavedImage* pSavedImage = &pGifWrapper->get()->SavedImages[frameNum];
   if (pSavedImage->ImageDesc.ColorMap != NULL) {
     // use local color table
@@ -1143,7 +1411,8 @@ void GifFrame_nativeRenderFrame(
   }
 
   uint8_t* pixels;
-  if (AndroidBitmap_lockPixels(pEnv, bitmap, (void**) &pixels) != ANDROID_BITMAP_RESULT_SUCCESS) {
+  if (AndroidBitmap_lockPixels(pEnv, bitmap, (void**)&pixels) !=
+      ANDROID_BITMAP_RESULT_SUCCESS) {
     throwIllegalStateException(pEnv, "Bad bitmap");
     return;
   }
@@ -1174,19 +1443,23 @@ jint GifFrame_nativeGetDurationMs(JNIEnv* pEnv, jobject thiz) {
 }
 
 /**
- * Gets the color (as an int, as in Android) of the transparent pixel of this frame
+ * Gets the color (as an int, as in Android) of the transparent pixel of this
+ * frame
  *
- * @return the color (as an int, as in Android) of the transparent pixel of this frame
+ * @return the color (as an int, as in Android) of the transparent pixel of this
+ * frame
  */
 jint GifFrame_nativeGetTransparentPixelColor(JNIEnv* pEnv, jobject thiz) {
   auto spNativeContext = getGifFrameNativeContext(pEnv, thiz);
   auto pGifWrapper = spNativeContext->spGifWrapper;
 
   //
-  // Get the right color table to use, then get index of transparent pixel into that table
+  // Get the right color table to use, then get index of transparent pixel into
+  // that table
   //
   int frameNum = spNativeContext->frameNum;
   ColorMapObject* pColorMap = pGifWrapper->get()->SColorMap;
+  ReaderLock rlock_{pGifWrapper->getSavedImagesRWLock()};
   SavedImage* pSavedImage = &pGifWrapper->get()->SavedImages[frameNum];
 
   if (pSavedImage->ImageDesc.ColorMap != NULL) {
@@ -1199,18 +1472,18 @@ jint GifFrame_nativeGetTransparentPixelColor(JNIEnv* pEnv, jobject thiz) {
 
   int colorIndex = spNativeContext->transparentIndex;
 
-  if (pColorMap != NULL  &&  colorIndex >= 0) {
+  if (pColorMap != NULL && colorIndex >= 0) {
     PixelType32 color = getColorFromTable(colorIndex, pColorMap);
 
     //
     // convert PixelType32 to Android-style int color value.
-    // the c++ compiler will optimize these four lines of bit-shifting -- there is no need to
-    // collapse them into a single confusing expression
+    // the c++ compiler will optimize these four lines of bit-shifting -- there
+    // is no need to collapse them into a single confusing expression
     //
-    int alphaShifted  = color.alpha   << 24;
-    int redShifted    = color.red     << 16;
-    int greenShifted  = color.green   <<  8;
-    int blueShifted   = color.blue    <<  0;
+    int alphaShifted = color.alpha << 24;
+    int redShifted = color.red << 16;
+    int greenShifted = color.green << 8;
+    int blueShifted = color.blue << 0;
 
     int iColor = alphaShifted | redShifted | greenShifted | blueShifted;
 
@@ -1305,7 +1578,8 @@ jint GifFrame_nativeGetDisposalMode(JNIEnv* pEnv, jobject thiz) {
 void GifFrame_nativeDispose(JNIEnv* pEnv, jobject thiz) {
   pEnv->MonitorEnter(thiz);
   GifFrameNativeContext* pNativeContext =
-      (GifFrameNativeContext*) pEnv->GetLongField(thiz, sGifFrameFieldNativeContext);
+      (GifFrameNativeContext*)pEnv->GetLongField(
+          thiz, sGifFrameFieldNativeContext);
   if (pNativeContext) {
     pEnv->SetLongField(thiz, sGifFrameFieldNativeContext, 0);
     GifFrameNativeContext_releaseRef(pEnv, thiz, pNativeContext);
@@ -1320,88 +1594,49 @@ void GifFrame_nativeFinalize(JNIEnv* pEnv, jobject thiz) {
   GifFrame_nativeDispose(pEnv, thiz);
 }
 
-
 static JNINativeMethod sGifImageMethods[] = {
-  { "nativeCreateFromDirectByteBuffer",
-    "(Ljava/nio/ByteBuffer;)Lcom/facebook/animated/gif/GifImage;",
-    (void*)GifImage_nativeCreateFromDirectByteBuffer },
-  { "nativeCreateFromNativeMemory",
-    "(JI)Lcom/facebook/animated/gif/GifImage;",
-    (void*)GifImage_nativeCreateFromNativeMemory },
-  { "nativeGetWidth",
-    "()I",
-    (void*)GifImage_nativeGetWidth },
-  { "nativeGetHeight",
-    "()I",
-    (void*)GifImage_nativeGetHeight },
-  { "nativeGetDuration",
-    "()I",
-    (void*)GifImage_nativeGetDuration },
-  { "nativeGetFrameCount",
-    "()I",
-    (void*)GifImage_nativeGetFrameCount },
-  { "nativeGetFrameDurations",
-    "()[I",
-    (void*)GifImage_nativeGetFrameDurations },
-  { "nativeGetDuration",
-    "()I",
-    (void*)GifImage_nativeGetDuration },
-  { "nativeGetLoopCount",
-    "()I",
-    (void*)GifImage_nativeGetLoopCount },
-  { "nativeGetFrame",
-    "(I)Lcom/facebook/animated/gif/GifFrame;",
-    (void*)GifImage_nativeGetFrame },
-  { "nativeGetSizeInBytes",
-    "()I",
-    (void*)GifImage_nativeGetSizeInBytes },
-  { "nativeDispose",
-    "()V",
-    (void*)GifImage_nativeDispose },
-  { "nativeFinalize",
-    "()V",
-    (void*)GifImage_nativeFinalize }
-};
+    {"nativeCreateFromDirectByteBuffer",
+     "(Ljava/nio/ByteBuffer;IZ)Lcom/facebook/animated/gif/GifImage;",
+     (void*)GifImage_nativeCreateFromDirectByteBuffer},
+    {"nativeCreateFromNativeMemory",
+     "(JIIZ)Lcom/facebook/animated/gif/GifImage;",
+     (void*)GifImage_nativeCreateFromNativeMemory},
+    {"nativeCreateFromFileDescriptor",
+     "(IIZ)Lcom/facebook/animated/gif/GifImage;",
+     (void*)GifImage_nativeCreateFromFileDescriptor},
+    {"nativeGetWidth", "()I", (void*)GifImage_nativeGetWidth},
+    {"nativeGetHeight", "()I", (void*)GifImage_nativeGetHeight},
+    {"nativeGetDuration", "()I", (void*)GifImage_nativeGetDuration},
+    {"nativeGetFrameCount", "()I", (void*)GifImage_nativeGetFrameCount},
+    {"nativeGetFrameDurations",
+     "()[I",
+     (void*)GifImage_nativeGetFrameDurations},
+    {"nativeGetLoopCount", "()I", (void*)GifImage_nativeGetLoopCount},
+    {"nativeGetFrame",
+     "(I)Lcom/facebook/animated/gif/GifFrame;",
+     (void*)GifImage_nativeGetFrame},
+    {"nativeGetSizeInBytes", "()I", (void*)GifImage_nativeGetSizeInBytes},
+    {"nativeIsAnimated", "()Z", (void*)GifImage_nativeIsAnimated},
+    {"nativeDispose", "()V", (void*)GifImage_nativeDispose},
+    {"nativeFinalize", "()V", (void*)GifImage_nativeFinalize}};
 
 static JNINativeMethod sGifFrameMethods[] = {
-  { "nativeRenderFrame",
-    "(IILandroid/graphics/Bitmap;)V",
-    (void*)GifFrame_nativeRenderFrame },
-  { "nativeGetDurationMs",
-    "()I",
-    (void*)GifFrame_nativeGetDurationMs },
-  { "nativeGetWidth",
-    "()I",
-    (void*)GifFrame_nativeGetWidth },
-  { "nativeGetHeight",
-    "()I",
-    (void*)GifFrame_nativeGetHeight },
-  { "nativeGetXOffset",
-    "()I",
-    (void*)GifFrame_nativeGetXOffset },
-  { "nativeGetYOffset",
-    "()I",
-    (void*)GifFrame_nativeGetYOffset },
-  { "nativeGetDurationMs",
-    "()I",
-    (void*)GifFrame_nativeGetDurationMs },
-  { "nativeGetTransparentPixelColor",
-    "()I",
-    (void*)GifFrame_nativeGetTransparentPixelColor },
-  { "nativeHasTransparency",
-    "()Z",
-    (void*)GifFrame_nativeHasTransparency },
-  { "nativeGetDisposalMode",
-    "()I",
-    (void*)GifFrame_nativeGetDisposalMode  },
-  { "nativeDispose",
-    "()V",
-    (void*)GifFrame_nativeDispose },
-  { "nativeFinalize",
-    "()V",
-    (void*)GifFrame_nativeFinalize },
+    {"nativeRenderFrame",
+     "(IILandroid/graphics/Bitmap;)V",
+     (void*)GifFrame_nativeRenderFrame},
+    {"nativeGetDurationMs", "()I", (void*)GifFrame_nativeGetDurationMs},
+    {"nativeGetWidth", "()I", (void*)GifFrame_nativeGetWidth},
+    {"nativeGetHeight", "()I", (void*)GifFrame_nativeGetHeight},
+    {"nativeGetXOffset", "()I", (void*)GifFrame_nativeGetXOffset},
+    {"nativeGetYOffset", "()I", (void*)GifFrame_nativeGetYOffset},
+    {"nativeGetTransparentPixelColor",
+     "()I",
+     (void*)GifFrame_nativeGetTransparentPixelColor},
+    {"nativeHasTransparency", "()Z", (void*)GifFrame_nativeHasTransparency},
+    {"nativeGetDisposalMode", "()I", (void*)GifFrame_nativeGetDisposalMode},
+    {"nativeDispose", "()V", (void*)GifFrame_nativeDispose},
+    {"nativeFinalize", "()V", (void*)GifFrame_nativeFinalize},
 };
-
 
 /**
  * Called by JNI_OnLoad to initialize the classes.
@@ -1414,13 +1649,15 @@ int initGifImage(JNIEnv* pEnv) {
   }
 
   // GifImage.mNativeContext
-  sGifImageFieldNativeContext = getFieldIdOrThrow(pEnv, sClazzGifImage, "mNativeContext", "J");
+  sGifImageFieldNativeContext =
+      getFieldIdOrThrow(pEnv, sClazzGifImage, "mNativeContext", "J");
   if (!sGifImageFieldNativeContext) {
     return JNI_ERR;
   }
 
   // GifImage.<init>
-  sGifImageConstructor = getMethodIdOrThrow(pEnv, sClazzGifImage, "<init>", "(J)V");
+  sGifImageConstructor =
+      getMethodIdOrThrow(pEnv, sClazzGifImage, "<init>", "(J)V");
   if (!sGifImageConstructor) {
     return JNI_ERR;
   }
@@ -1440,13 +1677,15 @@ int initGifImage(JNIEnv* pEnv) {
   }
 
   // GifFrame.mNativeContext
-  sGifFrameFieldNativeContext = getFieldIdOrThrow(pEnv, sClazzGifFrame, "mNativeContext", "J");
+  sGifFrameFieldNativeContext =
+      getFieldIdOrThrow(pEnv, sClazzGifFrame, "mNativeContext", "J");
   if (!sGifFrameFieldNativeContext) {
     return JNI_ERR;
   }
 
   // GifFrame.<init>
-  sGifFrameConstructor = getMethodIdOrThrow(pEnv, sClazzGifFrame, "<init>", "(J)V");
+  sGifFrameConstructor =
+      getMethodIdOrThrow(pEnv, sClazzGifFrame, "<init>", "(J)V");
   if (!sGifFrameConstructor) {
     return JNI_ERR;
   }

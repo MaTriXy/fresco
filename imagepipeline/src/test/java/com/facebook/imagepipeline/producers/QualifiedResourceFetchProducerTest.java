@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.producers;
@@ -21,6 +19,7 @@ import com.facebook.common.memory.PooledByteBuffer;
 import com.facebook.common.memory.PooledByteBufferFactory;
 import com.facebook.common.util.UriUtil;
 import com.facebook.imagepipeline.common.Priority;
+import com.facebook.imagepipeline.core.ImagePipelineConfig;
 import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imagepipeline.testing.FakeClock;
@@ -34,9 +33,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
-/**
- * Basic tests for QualifiedResourceFetchProducer
- */
+/** Basic tests for QualifiedResourceFetchProducer */
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class QualifiedResourceFetchProducerTest {
@@ -53,8 +50,9 @@ public class QualifiedResourceFetchProducerTest {
   @Mock public ContentResolver mContentResolver;
   @Mock public Consumer<EncodedImage> mConsumer;
   @Mock public ImageRequest mImageRequest;
-  @Mock public ProducerListener mProducerListener;
+  @Mock public ProducerListener2 mProducerListener;
   @Mock public Exception mException;
+  @Mock public ImagePipelineConfig mConfig;
 
   private TestExecutorService mExecutor;
   private SettableProducerContext mProducerContext;
@@ -65,21 +63,21 @@ public class QualifiedResourceFetchProducerTest {
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     mExecutor = new TestExecutorService(new FakeClock());
-    mQualifiedResourceFetchProducer = new QualifiedResourceFetchProducer(
-        mExecutor,
-        mPooledByteBufferFactory,
-        mContentResolver);
+    mQualifiedResourceFetchProducer =
+        new QualifiedResourceFetchProducer(mExecutor, mPooledByteBufferFactory, mContentResolver);
     mContentUri = UriUtil.getUriForQualifiedResource(PACKAGE_NAME, RESOURCE_ID);
 
-    mProducerContext = new SettableProducerContext(
-        mImageRequest,
-        REQUEST_ID,
-        mProducerListener,
-        CALLER_CONTEXT,
-        ImageRequest.RequestLevel.FULL_FETCH,
-        false,
-        true,
-        Priority.MEDIUM);
+    mProducerContext =
+        new SettableProducerContext(
+            mImageRequest,
+            REQUEST_ID,
+            mProducerListener,
+            CALLER_CONTEXT,
+            ImageRequest.RequestLevel.FULL_FETCH,
+            false,
+            true,
+            Priority.MEDIUM,
+            mConfig);
     when(mImageRequest.getSourceUri()).thenReturn(mContentUri);
   }
 
@@ -89,8 +87,7 @@ public class QualifiedResourceFetchProducerTest {
     when(mPooledByteBufferFactory.newByteBuffer(any(InputStream.class)))
         .thenReturn(pooledByteBuffer);
 
-    when(mContentResolver.openInputStream(mContentUri))
-        .thenReturn(mock(InputStream.class));
+    when(mContentResolver.openInputStream(mContentUri)).thenReturn(mock(InputStream.class));
 
     mQualifiedResourceFetchProducer.produceResults(mConsumer, mProducerContext);
     mExecutor.runUntilIdle();
@@ -98,7 +95,7 @@ public class QualifiedResourceFetchProducerTest {
     verify(mPooledByteBufferFactory, times(1)).newByteBuffer(any(InputStream.class));
     verify(mContentResolver, times(1)).openInputStream(mContentUri);
 
-    verify(mProducerListener).onProducerStart(REQUEST_ID, PRODUCER_NAME);
-    verify(mProducerListener).onProducerFinishWithSuccess(REQUEST_ID, PRODUCER_NAME, null);
+    verify(mProducerListener).onProducerStart(mProducerContext, PRODUCER_NAME);
+    verify(mProducerListener).onProducerFinishWithSuccess(mProducerContext, PRODUCER_NAME, null);
   }
 }

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.datasource;
@@ -13,6 +11,7 @@ import com.facebook.common.executors.CallerThreadExecutor;
 import com.facebook.common.internal.Objects;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.internal.Supplier;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.List;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -24,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>Data sources are obtained in order. Only if the current data source fails, or if it finishes
  * without result, the next one will be tried.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 @ThreadSafe
 public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<T>> {
 
@@ -50,7 +50,7 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
   }
 
   @Override
-  public boolean equals(Object other) {
+  public boolean equals(@Nullable Object other) {
     if (other == this) {
       return true;
     }
@@ -63,17 +63,15 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-        .add("list", mDataSourceSuppliers)
-        .toString();
+    return Objects.toStringHelper(this).add("list", mDataSourceSuppliers).toString();
   }
 
   @ThreadSafe
   private class FirstAvailableDataSource extends AbstractDataSource<T> {
 
     private int mIndex = 0;
-    private DataSource<T> mCurrentDataSource = null;
-    private DataSource<T> mDataSourceWithResult = null;
+    @Nullable private DataSource<T> mCurrentDataSource = null;
+    @Nullable private DataSource<T> mDataSourceWithResult = null;
 
     public FirstAvailableDataSource() {
       if (!startNextDataSource()) {
@@ -117,6 +115,7 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
     private boolean startNextDataSource() {
       Supplier<DataSource<T>> dataSourceSupplier = getNextSupplier();
       DataSource<T> dataSource = (dataSourceSupplier != null) ? dataSourceSupplier.get() : null;
+      // NULLSAFE_FIXME[Parameter Not Nullable]
       if (setCurrentDataSource(dataSource) && dataSource != null) {
         dataSource.subscribe(new InternalDataSubscriber(), CallerThreadExecutor.getInstance());
         return true;
@@ -155,9 +154,7 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
       return mDataSourceWithResult;
     }
 
-    private void maybeSetDataSourceWithResult(
-        DataSource<T> dataSource,
-        boolean isFinished) {
+    private void maybeSetDataSourceWithResult(DataSource<T> dataSource, boolean isFinished) {
       DataSource<T> oldDataSource = null;
       synchronized (FirstAvailableDataSource.this) {
         if (dataSource != mCurrentDataSource || dataSource == mDataSourceWithResult) {
@@ -184,7 +181,7 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
         closeSafely(dataSource);
       }
       if (!startNextDataSource()) {
-        setFailure(dataSource.getFailureCause());
+        setFailure(dataSource.getFailureCause(), dataSource.getExtras());
       }
     }
 
@@ -193,11 +190,11 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
       // If the data source with the new result is our {@code mDataSourceWithResult},
       // we have to notify our subscribers about the new result.
       if (dataSource == getDataSourceWithResult()) {
-        setResult(null, dataSource.isFinished());
+        setResult(null, dataSource.isFinished(), dataSource.getExtras());
       }
     }
 
-    private void closeSafely(DataSource<T> dataSource) {
+    private void closeSafely(@Nullable DataSource<T> dataSource) {
       if (dataSource != null) {
         dataSource.close();
       }
@@ -211,8 +208,7 @@ public class FirstAvailableDataSourceSupplier<T> implements Supplier<DataSource<
       }
 
       @Override
-      public void onCancellation(DataSource<T> dataSource) {
-      }
+      public void onCancellation(DataSource<T> dataSource) {}
 
       @Override
       public void onNewResult(DataSource<T> dataSource) {

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.core;
@@ -13,12 +11,12 @@ import com.facebook.cache.disk.DiskCacheConfig;
 import com.facebook.cache.disk.DiskStorage;
 import com.facebook.cache.disk.DiskStorageCache;
 import com.facebook.cache.disk.FileCache;
+import com.facebook.infer.annotation.Nullsafe;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-/**
- * Factory for the default implementation of the FileCache.
- */
+/** Factory for the default implementation of the FileCacheFactory. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class DiskStorageCacheFactory implements FileCacheFactory {
 
   private DiskStorageFactory mDiskStorageFactory;
@@ -27,20 +25,20 @@ public class DiskStorageCacheFactory implements FileCacheFactory {
     mDiskStorageFactory = diskStorageFactory;
   }
 
-  public static DiskStorageCache buildDiskStorageCache(
-      DiskCacheConfig diskCacheConfig,
-      DiskStorage diskStorage) {
+  private static DiskStorageCache buildDiskStorageCache(
+      DiskCacheConfig diskCacheConfig, DiskStorage diskStorage) {
     return buildDiskStorageCache(diskCacheConfig, diskStorage, Executors.newSingleThreadExecutor());
   }
 
-  public static DiskStorageCache buildDiskStorageCache(
+  private static DiskStorageCache buildDiskStorageCache(
       DiskCacheConfig diskCacheConfig,
       DiskStorage diskStorage,
       Executor executorForBackgroundInit) {
-    DiskStorageCache.Params params = new DiskStorageCache.Params(
-        diskCacheConfig.getMinimumSizeLimit(),
-        diskCacheConfig.getLowDiskSpaceSizeLimit(),
-        diskCacheConfig.getDefaultSizeLimit());
+    DiskStorageCache.Params params =
+        new DiskStorageCache.Params(
+            diskCacheConfig.getMinimumSizeLimit(),
+            diskCacheConfig.getLowDiskSpaceSizeLimit(),
+            diskCacheConfig.getDefaultSizeLimit());
 
     return new DiskStorageCache(
         diskStorage,
@@ -49,7 +47,6 @@ public class DiskStorageCacheFactory implements FileCacheFactory {
         diskCacheConfig.getCacheEventListener(),
         diskCacheConfig.getCacheErrorLogger(),
         diskCacheConfig.getDiskTrimmableRegistry(),
-        diskCacheConfig.getContext(),
         executorForBackgroundInit,
         diskCacheConfig.getIndexPopulateAtStartupEnabled());
   }

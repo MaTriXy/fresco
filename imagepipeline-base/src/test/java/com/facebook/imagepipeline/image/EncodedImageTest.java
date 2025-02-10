@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.image;
@@ -31,9 +29,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link EncodedImage}
- */
+/** Tests for {@link EncodedImage} */
 @RunWith(RobolectricTestRunner.class)
 public class EncodedImageTest {
 
@@ -47,12 +43,13 @@ public class EncodedImageTest {
   public void setup() {
     mByteBufferRef = CloseableReference.of(mock(PooledByteBuffer.class));
     mInputStream = mock(FileInputStream.class);
-    mInputStreamSupplier = new Supplier<FileInputStream>() {
-      @Override
-      public FileInputStream get() {
-        return mInputStream;
-      }
-    };
+    mInputStreamSupplier =
+        new Supplier<FileInputStream>() {
+          @Override
+          public FileInputStream get() {
+            return mInputStream;
+          }
+        };
   }
 
   @Test
@@ -168,8 +165,10 @@ public class EncodedImageTest {
 
   @Test
   public void testParseMetaData_JPEG() throws IOException {
-    PooledByteBuffer buf = new TrivialPooledByteBuffer(
-        ByteStreams.toByteArray(EncodedImageTest.class.getResourceAsStream("images/image.jpg")));
+    PooledByteBuffer buf =
+        new TrivialPooledByteBuffer(
+            ByteStreams.toByteArray(
+                EncodedImageTest.class.getResourceAsStream("images/image.jpg")));
     EncodedImage encodedImage = new EncodedImage(CloseableReference.of(buf));
     encodedImage.parseMetaData();
     assertSame(DefaultImageFormats.JPEG, encodedImage.getImageFormat());
@@ -181,8 +180,10 @@ public class EncodedImageTest {
 
   @Test
   public void testParseMetaData_PNG() throws IOException {
-    PooledByteBuffer buf = new TrivialPooledByteBuffer(
-        ByteStreams.toByteArray(EncodedImageTest.class.getResourceAsStream("images/image.png")));
+    PooledByteBuffer buf =
+        new TrivialPooledByteBuffer(
+            ByteStreams.toByteArray(
+                EncodedImageTest.class.getResourceAsStream("images/image.png")));
     EncodedImage encodedImage = new EncodedImage(CloseableReference.of(buf));
     encodedImage.parseMetaData();
     assertSame(DefaultImageFormats.PNG, encodedImage.getImageFormat());
@@ -192,12 +193,15 @@ public class EncodedImageTest {
     assertEquals(0, encodedImage.getExifOrientation());
   }
 
-  private void checkWebpImage(final String imagePath,
+  private void checkWebpImage(
+      final String imagePath,
       final ImageFormat imageFormat,
       final int expectedWidth,
-      final int expectedHeight) throws IOException {
-    PooledByteBuffer buf = new TrivialPooledByteBuffer(
-        ByteStreams.toByteArray(EncodedImageTest.class.getResourceAsStream(imagePath)));
+      final int expectedHeight)
+      throws IOException {
+    PooledByteBuffer buf =
+        new TrivialPooledByteBuffer(
+            ByteStreams.toByteArray(EncodedImageTest.class.getResourceAsStream(imagePath)));
     EncodedImage encodedImage = new EncodedImage(CloseableReference.of(buf));
     encodedImage.parseMetaData();
     assertSame(imageFormat, encodedImage.getImageFormat());

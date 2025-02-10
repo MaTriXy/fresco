@@ -1,16 +1,14 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.common;
 
-import static org.fest.assertions.api.Assertions.assertThat;
-import static org.fest.assertions.api.Assertions.failBecauseExceptionWasNotThrown;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.failBecauseExceptionWasNotThrown;
 
 import org.junit.Test;
 
@@ -49,7 +47,7 @@ public class BytesRangeTest {
     assertValidFromContentRangeHeader("bytes 0-499/1234", 0, 499);
     assertValidFromContentRangeHeader("bytes 500-999/1234", 500, 999);
     assertValidFromContentRangeHeader("bytes 500-1233/1234", 500, BytesRange.TO_END_OF_CONTENT);
-    assertValidFromContentRangeHeader("bytes 734-1233/1234",734, BytesRange.TO_END_OF_CONTENT);
+    assertValidFromContentRangeHeader("bytes 734-1233/1234", 734, BytesRange.TO_END_OF_CONTENT);
   }
 
   @Test
@@ -64,9 +62,7 @@ public class BytesRangeTest {
   }
 
   private static void assertValidFromContentRangeHeader(
-      String header,
-      int expectedFrom,
-      int expectedEnd) {
+      String header, int expectedFrom, int expectedEnd) {
     final BytesRange bytesRange = BytesRange.fromContentRangeHeader(header);
     assertThat(bytesRange.from).isEqualTo(expectedFrom);
     assertThat(bytesRange.to).isEqualTo(expectedEnd);

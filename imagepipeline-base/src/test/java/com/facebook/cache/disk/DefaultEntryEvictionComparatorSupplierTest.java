@@ -1,11 +1,10 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 package com.facebook.cache.disk;
 
 import static org.junit.Assert.assertTrue;
@@ -20,9 +19,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Test for {@link DefaultEntryEvictionComparatorSupplierTest}
- */
+/** Test for {@link DefaultEntryEvictionComparatorSupplierTest} */
 @RunWith(RobolectricTestRunner.class)
 public class DefaultEntryEvictionComparatorSupplierTest {
 
@@ -47,5 +44,4 @@ public class DefaultEntryEvictionComparatorSupplierTest {
     when(entry.getTimestamp()).thenReturn(time);
     return entry;
   }
-
 }

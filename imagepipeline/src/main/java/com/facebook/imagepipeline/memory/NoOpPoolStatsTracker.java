@@ -1,22 +1,21 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.imagepipeline.memory;
 
-/**
- * Empty implementation of PoolStatsTracker that does not perform any tracking.
- */
-public class NoOpPoolStatsTracker implements PoolStatsTracker {
-  private static NoOpPoolStatsTracker sInstance = null;
+import com.facebook.infer.annotation.Nullsafe;
+import javax.annotation.Nullable;
 
-  private NoOpPoolStatsTracker() {
-  }
+/** Empty implementation of PoolStatsTracker that does not perform any tracking. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
+public class NoOpPoolStatsTracker implements PoolStatsTracker {
+  private static @Nullable NoOpPoolStatsTracker sInstance = null;
+
+  private NoOpPoolStatsTracker() {}
 
   public static synchronized NoOpPoolStatsTracker getInstance() {
     if (sInstance == null) {
@@ -26,30 +25,23 @@ public class NoOpPoolStatsTracker implements PoolStatsTracker {
   }
 
   @Override
-  public void setBasePool(BasePool basePool) {
-  }
+  public void setBasePool(BasePool basePool) {}
 
   @Override
-  public void onValueReuse(int bucketedSize) {
-  }
+  public void onValueReuse(int bucketedSize) {}
 
   @Override
-  public void onSoftCapReached() {
-  }
+  public void onSoftCapReached() {}
 
   @Override
-  public void onHardCapReached() {
-  }
+  public void onHardCapReached() {}
 
   @Override
-  public void onAlloc(int size) {
-  }
+  public void onAlloc(int size) {}
 
   @Override
-  public void onFree(int sizeInBytes) {
-  }
+  public void onFree(int sizeInBytes) {}
 
   @Override
-  public void onValueRelease(int sizeInBytes) {
-  }
+  public void onValueRelease(int sizeInBytes) {}
 }

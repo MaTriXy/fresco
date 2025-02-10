@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.drawable;
@@ -19,18 +17,20 @@ import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import com.facebook.common.internal.Preconditions;
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
 /**
- * A Drawable that contains an array of other Drawables (layers). These are drawn in array order,
- * so the element with the largest index will be drawn on top.
+ * A Drawable that contains an array of other Drawables (layers). These are drawn in array order, so
+ * the element with the largest index will be drawn on top.
  *
  * <p>Similar to android's LayerDrawable but it doesn't support adding/removing layers dynamically.
  */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public class ArrayDrawable extends Drawable
     implements Drawable.Callback, TransformCallback, TransformAwareDrawable {
 
-  private TransformCallback mTransformCallback;
+  @Nullable private TransformCallback mTransformCallback;
 
   private final DrawableProperties mDrawableProperties = new DrawableProperties();
 
@@ -50,6 +50,7 @@ public class ArrayDrawable extends Drawable
 
   /**
    * Constructs a new layer drawable.
+   *
    * @param layers the layers that this drawable displays
    */
   public ArrayDrawable(Drawable[] layers) {
@@ -63,6 +64,7 @@ public class ArrayDrawable extends Drawable
 
   /**
    * Gets the number of layers.
+   *
    * @return number of layers
    */
   public int getNumberOfLayers() {
@@ -71,6 +73,7 @@ public class ArrayDrawable extends Drawable
 
   /**
    * Gets the drawable at the specified index.
+   *
    * @param index index of drawable to get
    * @return drawable at the specified index
    */
@@ -103,7 +106,6 @@ public class ArrayDrawable extends Drawable
     }
     return oldDrawable;
   }
-
 
   @Override
   public int getIntrinsicWidth() {
@@ -289,9 +291,7 @@ public class ArrayDrawable extends Drawable
     return changed;
   }
 
-  /**
-   * Gets the {@code DrawableParent} for index.
-   */
+  /** Gets the {@code DrawableParent} for index. */
   public DrawableParent getDrawableParentForIndex(int index) {
     Preconditions.checkArgument(index >= 0);
     Preconditions.checkArgument(index < mDrawableParents.length);
@@ -303,11 +303,13 @@ public class ArrayDrawable extends Drawable
 
   private DrawableParent createDrawableParentForIndex(final int index) {
     return new DrawableParent() {
+      @Nullable
       @Override
-      public Drawable setDrawable(Drawable newDrawable) {
+      public Drawable setDrawable(@Nullable Drawable newDrawable) {
         return ArrayDrawable.this.setDrawable(index, newDrawable);
       }
 
+      @Nullable
       @Override
       public Drawable getDrawable() {
         return ArrayDrawable.this.getDrawable(index);
@@ -315,10 +317,7 @@ public class ArrayDrawable extends Drawable
     };
   }
 
-  /**
-   * Drawable.Callback methods
-   */
-
+  /** Drawable.Callback methods */
   @Override
   public void invalidateDrawable(Drawable who) {
     invalidateSelf();
@@ -334,18 +333,13 @@ public class ArrayDrawable extends Drawable
     unscheduleSelf(what);
   }
 
-  /**
-   * TransformationCallbackSetter method
-   */
+  /** TransformationCallbackSetter method */
   @Override
-  public void setTransformCallback(TransformCallback transformCallback) {
+  public void setTransformCallback(@Nullable TransformCallback transformCallback) {
     mTransformCallback = transformCallback;
   }
 
-  /**
-   * TransformationCallback methods
-   */
-
+  /** TransformationCallback methods */
   @Override
   public void getTransform(Matrix transform) {
     if (mTransformCallback != null) {

@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.common.memory;
@@ -17,9 +15,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-/**
- * Tests for {@link PooledByteBufferInputStream}
- */
+/** Tests for {@link PooledByteBufferInputStream} */
 @RunWith(RobolectricTestRunner.class)
 public class PooledByteBufferInputStreamTest {
   private static final byte[] BYTES = new byte[] {1, 123, -20, 3, 6, 23, 1};
@@ -128,7 +124,7 @@ public class PooledByteBufferInputStreamTest {
 
   @Test
   public void testRead_ToByteArray3() {
-    byte[] buf = new byte[BYTES.length -1];
+    byte[] buf = new byte[BYTES.length - 1];
     assertEquals(buf.length, mStream.read(buf));
     assertEquals(buf.length, mStream.mOffset);
     assertArrayEquals(BYTES, buf, buf.length);
@@ -136,8 +132,8 @@ public class PooledByteBufferInputStreamTest {
 
   @Test
   public void testCreateEmptyStream() throws Exception {
-    PooledByteBufferInputStream is = new PooledByteBufferInputStream(
-        new TrivialPooledByteBuffer(new byte[] {}));
+    PooledByteBufferInputStream is =
+        new PooledByteBufferInputStream(new TrivialPooledByteBuffer(new byte[] {}));
     assertEquals(-1, is.read());
   }
 

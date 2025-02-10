@@ -1,19 +1,47 @@
-apply plugin: 'com.android.library'
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-project.group = GROUP
-version = VERSION_NAME
+import com.facebook.fresco.buildsrc.Deps
+import com.facebook.fresco.buildsrc.GradleDeps
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+kotlin {
+    jvmToolchain(11)
+}
 
 dependencies {
-  implementation "com.squareup.okhttp3:okhttp:${OKHTTP3_VERSION}"
+    compileOnly Deps.inferAnnotation
+    compileOnly Deps.jsr305
 
-  implementation project(':fbcore')
-  implementation project(':imagepipeline')
+    api Deps.okhttp3
+
+    implementation project(':fbcore')
+    implementation project(':imagepipeline')
+    implementation project(':imagepipeline-native')
+    implementation project(':memory-types:ashmem')
+    implementation project(':memory-types:nativememory')
+    implementation project(':memory-types:simple')
+    implementation project(':middleware')
 }
-apply from: rootProject.file('release.gradle')
 
 android {
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    ndkVersion GradleDeps.Native.version
+
+    buildToolsVersion FrescoConfig.buildToolsVersion
+    compileSdkVersion FrescoConfig.compileSdkVersion
+
+    namespace "com.facebook.imagepipeline.backends.okhttp3"
+
+    defaultConfig {
+        minSdkVersion FrescoConfig.minSdkVersion
+        targetSdkVersion FrescoConfig.targetSdkVersion
+    }
 
     packagingOptions {
         exclude 'LICENSE'
@@ -28,9 +56,4 @@ android {
     }
 }
 
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-artifacts.add('archives', sourcesJar)
-
+apply plugin: "com.vanniktech.maven.publish"

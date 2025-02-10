@@ -1,24 +1,20 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.cache.common;
 
+import com.facebook.infer.annotation.Nullsafe;
 import javax.annotation.Nullable;
 
-/**
- * An interface for logging various cache errors.
- */
+/** An interface for logging various cache errors. */
+@Nullsafe(Nullsafe.Mode.LOCAL)
 public interface CacheErrorLogger {
 
-  /**
-   * A categorizaton of different cache and storage related errors.
-   */
+  /** A categorizaton of different cache and storage related errors. */
   enum CacheErrorCategory {
     READ_DECODE,
     READ_FILE,
@@ -44,14 +40,12 @@ public interface CacheErrorLogger {
 
   /**
    * Log an error of the specified category.
+   *
    * @param category Error category
    * @param clazz Class reporting the error
    * @param message An optional error message
    * @param throwable An optional exception
    */
   void logError(
-      CacheErrorCategory category,
-      Class<?> clazz,
-      String message,
-      @Nullable Throwable throwable);
+      CacheErrorCategory category, Class<?> clazz, String message, @Nullable Throwable throwable);
 }

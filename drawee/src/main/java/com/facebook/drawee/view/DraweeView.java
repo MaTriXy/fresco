@@ -1,10 +1,8 @@
 /*
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.drawee.view;
@@ -23,23 +21,27 @@ import android.widget.ImageView;
 import com.facebook.common.internal.Objects;
 import com.facebook.drawee.interfaces.DraweeController;
 import com.facebook.drawee.interfaces.DraweeHierarchy;
+import com.facebook.imagepipeline.systrace.FrescoSystrace;
 import javax.annotation.Nullable;
 
 /**
  * View that displays a {@link DraweeHierarchy}.
  *
- * <p> Hierarchy should be set prior to using this view. See {@code setHierarchy}. Because creating
- * a hierarchy is an expensive operation, it is recommended this be done once per view, typically
- * near creation time.
+ * <p>Hierarchy should be set prior to using this view. See {@code setHierarchy}. Because creating a
+ * hierarchy is an expensive operation, it is recommended this be done once per view, typically near
+ * creation time.
  *
- * <p> In order to display an image, controller has to be set. See {@code setController}.
-
- * <p> Although ImageView is subclassed instead of subclassing View directly, this class does not
+ * <p>In order to display an image, controller has to be set. See {@code setController}.
+ *
+ * <p>Although ImageView is subclassed instead of subclassing View directly, this class does not
  * support ImageView's setImageXxx, setScaleType and similar methods. Extending ImageView is a short
- * term solution in order to inherit some of its implementation (padding calculations, etc.).
- * This class is likely to be converted to extend View directly in the future, so avoid using
- * ImageView's methods and properties.
+ * term solution in order to inherit some of its implementation (padding calculations, etc.). This
+ * class is likely to be converted to extend View directly in the future, so avoid using ImageView's
+ * methods and properties.
+ *
+ * <p>This class has been deprecated. Please use VitoView instead.
  */
+@Deprecated
 public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
 
   private final AspectRatioMeasure.Spec mMeasureSpec = new AspectRatioMeasure.Spec();
@@ -49,6 +51,8 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   private boolean mLegacyVisibilityHandlingEnabled = false;
 
   private static boolean sGlobalLegacyVisibilityHandlingEnabled = false;
+
+  private @Nullable Object mExtraData = null;
 
   public static void setGlobalLegacyVisibilityHandlingEnabled(
       boolean legacyVisibilityHandlingEnabled) {
@@ -60,40 +64,58 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
     init(context);
   }
 
-  public DraweeView(Context context, AttributeSet attrs) {
+  public DraweeView(Context context, @Nullable AttributeSet attrs) {
     super(context, attrs);
     init(context);
   }
 
-  public DraweeView(Context context, AttributeSet attrs, int defStyle) {
+  public DraweeView(Context context, @Nullable AttributeSet attrs, int defStyle) {
     super(context, attrs, defStyle);
     init(context);
   }
 
   @TargetApi(Build.VERSION_CODES.LOLLIPOP)
   public DraweeView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
-    super(context,attrs,defStyleAttr,defStyleRes);
+    super(context, attrs, defStyleAttr, defStyleRes);
     init(context);
   }
 
   /** This method is idempotent so it only has effect the first time it's called */
   private void init(Context context) {
-    if (mInitialised) {
-      return;
-    }
-    mInitialised = true;
-    mDraweeHolder = DraweeHolder.create(null, context);
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      ColorStateList imageTintList = getImageTintList();
-      if (imageTintList == null) {
+    try {
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.beginSection("DraweeView#init");
+      }
+      if (mInitialised) {
         return;
       }
-      setColorFilter(imageTintList.getDefaultColor());
+      mInitialised = true;
+      mDraweeHolder = DraweeHolder.create(null, context);
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        ColorStateList imageTintList = getImageTintList();
+        if (imageTintList == null) {
+          return;
+        }
+        setColorFilter(imageTintList.getDefaultColor());
+      }
+      // In Android N and above, visibility handling for Drawables has been changed, which breaks
+      // activity transitions with DraweeViews.
+      mLegacyVisibilityHandlingEnabled =
+          sGlobalLegacyVisibilityHandlingEnabled
+              && context.getApplicationInfo().targetSdkVersion >= 24; // Build.VERSION_CODES.N
+    } finally {
+      if (FrescoSystrace.isTracing()) {
+        FrescoSystrace.endSection();
+      }
     }
-    // In Android N and above, visibility handling for Drawables has been changed, which breaks
-    // activity transitions with DraweeViews.
-    mLegacyVisibilityHandlingEnabled = sGlobalLegacyVisibilityHandlingEnabled &&
-        context.getApplicationInfo().targetSdkVersion >= 24; //Build.VERSION_CODES.N
+  }
+
+  public void setExtraData(@Nullable Object extraData) {
+    mExtraData = extraData;
+  }
+
+  public @Nullable Object getExtraData() {
+    return mExtraData;
   }
 
   /** Sets the hierarchy. */
@@ -113,7 +135,8 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   }
 
   /** Gets the top-level drawable if hierarchy is set, null otherwise. */
-  @Nullable public Drawable getTopLevelDrawable() {
+  @Nullable
+  public Drawable getTopLevelDrawable() {
     return mDraweeHolder.getTopLevelDrawable();
   }
 
@@ -124,13 +147,18 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   }
 
   /** Gets the controller if set, null otherwise. */
-  @Nullable public DraweeController getController() {
+  @Nullable
+  public DraweeController getController() {
     return mDraweeHolder.getController();
   }
 
-  /** Returns whether the controller is set or not.  */
+  /** Returns whether the controller is set or not. */
   public boolean hasController() {
     return mDraweeHolder.getController() != null;
+  }
+
+  public void resetActualImage() {
+    setController(null);
   }
 
   @Override
@@ -166,7 +194,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
     doAttach();
   }
 
-  /**  Called by the system to detach. Subclasses may override. */
+  /** Called by the system to detach. Subclasses may override. */
   protected void onDetach() {
     doDetach();
   }
@@ -174,7 +202,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   /**
    * Does the actual work of attaching.
    *
-   * Non-test subclasses should NOT override. Use onAttach for custom code.
+   * <p>Non-test subclasses should NOT override. Use onAttach for custom code.
    */
   protected void doAttach() {
     mDraweeHolder.onAttach();
@@ -183,7 +211,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   /**
    * Does the actual work of detaching.
    *
-   * Non-test subclasses should NOT override. Use onDetach for custom code.
+   * <p>Non-test subclasses should NOT override. Use onDetach for custom code.
    */
   protected void doDetach() {
     mDraweeHolder.onDetach();
@@ -199,55 +227,57 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
 
   /**
    * Use this method only when using this class as an ordinary ImageView.
+   *
    * @deprecated Use {@link #setController(DraweeController)} instead.
    */
   @Override
   @Deprecated
-  public void setImageDrawable(Drawable drawable) {
+  public void setImageDrawable(@Nullable Drawable drawable) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageDrawable(drawable);
   }
 
   /**
    * Use this method only when using this class as an ordinary ImageView.
+   *
    * @deprecated Use {@link #setController(DraweeController)} instead.
    */
   @Override
   @Deprecated
   public void setImageBitmap(Bitmap bm) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageBitmap(bm);
   }
 
   /**
    * Use this method only when using this class as an ordinary ImageView.
+   *
    * @deprecated Use {@link #setController(DraweeController)} instead.
    */
   @Override
   @Deprecated
   public void setImageResource(int resId) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageResource(resId);
   }
 
   /**
    * Use this method only when using this class as an ordinary ImageView.
+   *
    * @deprecated Use {@link #setController(DraweeController)} instead.
    */
   @Override
   @Deprecated
   public void setImageURI(Uri uri) {
     init(getContext());
-    mDraweeHolder.setController(null);
+    mDraweeHolder.resetActualImage();
     super.setImageURI(uri);
   }
 
-  /**
-   * Sets the desired aspect ratio (w/h).
-   */
+  /** Sets the desired aspect ratio (w/h). */
   public void setAspectRatio(float aspectRatio) {
     if (aspectRatio == mAspectRatio) {
       return;
@@ -256,9 +286,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
     requestLayout();
   }
 
-  /**
-   * Gets the desired aspect ratio (w/h).
-   */
+  /** Gets the desired aspect ratio (w/h). */
   public float getAspectRatio() {
     return mAspectRatio;
   }
@@ -281,15 +309,13 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   }
 
   @Override
-  protected void onVisibilityChanged(
-      View changedView,
-      int visibility) {
+  protected void onVisibilityChanged(View changedView, int visibility) {
     super.onVisibilityChanged(changedView, visibility);
     maybeOverrideVisibilityHandling();
   }
 
   private void maybeOverrideVisibilityHandling() {
-    if (mLegacyVisibilityHandlingEnabled)  {
+    if (mLegacyVisibilityHandlingEnabled) {
       Drawable drawable = getDrawable();
       if (drawable != null) {
         drawable.setVisible(getVisibility() == VISIBLE, false);
@@ -300,7 +326,7 @@ public class DraweeView<DH extends DraweeHierarchy> extends ImageView {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-        .add("holder", mDraweeHolder != null ? mDraweeHolder.toString(): "<no holder set>")
+        .add("holder", mDraweeHolder != null ? mDraweeHolder.toString() : "<no holder set>")
         .toString();
   }
 }
